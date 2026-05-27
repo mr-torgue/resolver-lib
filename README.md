@@ -1,6 +1,6 @@
 # resolver
 
-> [!INFO]
+> [!NOTE]
 > Forked from [this](https://github.com/nsmithuk/resolver) repository. The goal is to
 > insert a cache, add support for other clients, such as DoQ and DoH, and make the configuration flexible.
 > This library will be used for the resolver CoreDNS plugin to turn CoreDNS into a iterative resolver.
