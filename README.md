@@ -1,5 +1,10 @@
 # resolver
 
+> [!INFO]
+> Forked from [this](https://github.com/nsmithuk/resolver) repository. The goal is to
+> insert a cache, add support for other clients, such as DoQ and DoH, and make the configuration flexible.
+> This library will be used for the resolver CoreDNS plugin to turn CoreDNS into a iterative resolver.
+
 A recursive DNS resolver with a Go-based API, designed to handle domain name resolution from the root nameservers.
 It includes support for DNSSEC validation via the dnssec package, which ensures the authenticity 
 and integrity of DNS responses. Please note that the dnssec package will eventually be moved to its own 
