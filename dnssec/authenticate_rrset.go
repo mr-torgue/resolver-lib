@@ -2,7 +2,7 @@ package dnssec
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"time"
 )
 

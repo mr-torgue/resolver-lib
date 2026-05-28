@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 func (pool *nameserverPool) exchange(ctx context.Context, m *dns.Msg) *Response {

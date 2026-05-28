@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 // dnsClientFactory defines a factory function for creating a DNS client.

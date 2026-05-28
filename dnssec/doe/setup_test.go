@@ -1,7 +1,7 @@
 package doe
 
 import (
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 const zoneName = "example.com."

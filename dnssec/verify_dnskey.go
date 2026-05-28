@@ -3,7 +3,7 @@ package dnssec
 import (
 	"context"
 	"fmt"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"strings"
 )
 

@@ -2,7 +2,7 @@ package dnssec
 
 import (
 	"context"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 func (v verifier) verify(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {

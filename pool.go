@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 type NameserverPoolStatus uint8

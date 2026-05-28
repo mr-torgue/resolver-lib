@@ -3,7 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"

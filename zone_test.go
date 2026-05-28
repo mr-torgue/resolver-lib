@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"github.com/stretchr/testify/assert"
 )
 

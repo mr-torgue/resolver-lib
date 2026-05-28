@@ -5,7 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"io"
 	"strings"
 	"time"

@@ -3,7 +3,7 @@ package dnssec
 import (
 	"context"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"github.com/mr-torgue/resolver-lib/dnssec/doe"
 )
 

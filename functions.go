@@ -1,7 +1,7 @@
 package resolver
 
 import (
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 )
 
 var dnsRecordTypes = map[uint16]string{

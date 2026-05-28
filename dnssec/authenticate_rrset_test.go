@@ -2,7 +2,7 @@ package dnssec
 
 import (
 	"errors"
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"github.com/stretchr/testify/assert"
 	"net"
 	"slices"
