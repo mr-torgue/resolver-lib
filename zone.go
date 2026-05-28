@@ -3,10 +3,11 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"github.com/miekg/dns"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 //---------------------------------------------------------------------------------

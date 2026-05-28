@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/mock"
 )

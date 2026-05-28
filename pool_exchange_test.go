@@ -3,9 +3,10 @@ package resolver
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 type TestPoolExchangeMockNameserver struct {

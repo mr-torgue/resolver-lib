@@ -2,9 +2,10 @@ package resolver
 
 import (
 	"context"
+	"time"
+
 	"github.com/miekg/dns"
 	"github.com/nsmithuk/resolver/dnssec"
-	"time"
 )
 
 type Response struct {

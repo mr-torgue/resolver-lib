@@ -2,10 +2,11 @@ package resolver
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 var ipv6Check sync.Once

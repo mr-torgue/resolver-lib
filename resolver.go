@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/nsmithuk/resolver/dnssec"
 )
 

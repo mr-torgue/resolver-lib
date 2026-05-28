@@ -1,11 +1,12 @@
 package resolver
 
 import (
-	"github.com/miekg/dns"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 type NameserverPoolStatus uint8

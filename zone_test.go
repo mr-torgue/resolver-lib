@@ -3,9 +3,10 @@ package resolver
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/mock"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/mock"
 
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"

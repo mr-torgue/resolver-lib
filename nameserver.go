@@ -3,10 +3,11 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"github.com/miekg/dns"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // dnsClientFactory defines a factory function for creating a DNS client.

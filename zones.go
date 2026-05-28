@@ -1,9 +1,10 @@
 package resolver
 
 import (
-	"github.com/miekg/dns"
 	"slices"
 	"sync"
+
+	"github.com/miekg/dns"
 )
 
 type zoneStore interface {
