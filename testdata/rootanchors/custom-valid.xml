@@ -1,0 +1,21 @@
+<TrustAnchor id="1" source="example" Zone="example.com">
+    <Zone>.</Zone>
+    <KeyDigest id="key1" validFrom="2017-02-02T00:00:00+00:00">
+        <KeyTag>20537</KeyTag>
+        <Algorithm>15</Algorithm>
+        <DigestType>2</DigestType>
+        <Digest>1D551A7E4DA7AC1EB4311D44FEF74981213DEFA8E85CAED00ABB53BFF9123EC7</Digest>
+    </KeyDigest>
+    <KeyDigest id="key2" validFrom="2017-02-02T00:00:00+00:00">
+        <KeyTag>50759</KeyTag>
+        <Algorithm>8</Algorithm>
+        <DigestType>2</DigestType>
+        <Digest>0D1B5D1A7125BD5DF626FD6563ABC4B2C40905D06E62DE7D99EBFB081F7C1E6B</Digest>
+    </KeyDigest>
+    <KeyDigest id="key3" validFrom="2017-02-02T00:00:00+00:00">
+        <KeyTag>52003</KeyTag>
+        <Algorithm>18</Algorithm>
+        <DigestType>2</DigestType>
+        <Digest>47669C32ACC67DAEC3F459B696153FB1AA8E3CE9B61BB50DBD49A5316B271126</Digest>
+    </KeyDigest>
+</TrustAnchor>

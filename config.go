@@ -1,8 +1,9 @@
 package resolver
 
 import (
-	"github.com/nsmithuk/resolver/dnssec"
 	"time"
+
+	"github.com/nsmithuk/resolver/dnssec"
 )
 
 const (
@@ -21,6 +22,9 @@ const (
 
 	DefaultTimeoutUDP = 150 * time.Millisecond
 	DefaultTimeoutTCP = 600 * time.Millisecond
+
+	DefaultRootzone    = "named.root"
+	DefaultRootanchors = "root-anchors.xml"
 )
 
 var (
@@ -82,5 +86,34 @@ func init() {
 	}
 	dnssec.Debug = func(s string) {
 		Debug(s)
+	}
+}
+
+type Config struct {
+	rootZoneFile   string
+	rootAnchorFile string
+}
+
+type Option func(*Config)
+
+// ConfigBuilder builds a configuration based on the provided options.
+func ConfigBuilder(options ...Option) *Config {
+	c := &Config{
+		rootZoneFile:   DefaultRootzone,
+		rootAnchorFile: DefaultRootanchors,
+	}
+	for _, o := range options {
+		o(c)
+	}
+	// load files
+
+	return c
+}
+
+// WithCustomRoot overwrites the standard rootzone and anchors.
+func WithCustomRoot(filename string, anchorfilename string) Option {
+	return func(c *Config) {
+		c.rootZoneFile = filename
+		c.rootAnchorFile = anchorfilename
 	}
 }

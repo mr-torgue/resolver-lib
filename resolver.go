@@ -2,8 +2,11 @@ package resolver
 
 import (
 	"context"
-	"github.com/miekg/dns"
+	"os"
 	"strings"
+
+	"github.com/mr-torgue/dns"
+	"github.com/nsmithuk/resolver/dnssec"
 )
 
 type Resolver struct {
@@ -22,8 +25,15 @@ type resolverFunctions struct {
 	getExchanger         func() exchanger
 }
 
-func NewResolver() *Resolver {
-	pool, err := buildRootServerPool()
+func NewResolver(config Config) *Resolver {
+	// load files
+	dnssec.LoadAnchors(config.rootAnchorFile)
+	rootZone, err := os.ReadFile(config.rootZoneFile)
+	if err != nil {
+		panic(err)
+	}
+	rootZoneStr := string(rootZone)
+	pool, err := buildRootServerPool(rootZoneStr)
 	if err != nil {
 		// Everything is technically static at this point.
 		panic(err)
@@ -64,7 +74,7 @@ func (resolver *Resolver) CountZones() int {
 
 //-----------------------------------------------------------------------------
 
-func buildRootServerPool() (*nameserverPool, error) {
+func buildRootServerPool(rootZone string) (*nameserverPool, error) {
 	zp := dns.NewZoneParser(strings.NewReader(rootZone), ".", "local")
 
 	pool := &nameserverPool{hostsWithoutAddresses: make([]string, 0)}

@@ -3,14 +3,15 @@ package resolver
 import (
 	"context"
 	"errors"
-	"github.com/miekg/dns"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"net"
 	"regexp"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var uuidv7Regex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
@@ -983,4 +984,15 @@ func TestResolver_FinaliseResponse_Opt(t *testing.T) {
 	}
 
 	assert.True(t, optSeen)
+}
+
+func BenchmarkResolver_Exchange(b *testing.B) {
+	resolver := NewResolver(Config{})
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn("github.com"), dns.TypeA)
+	msg.SetEdns0(4096, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = resolver.Exchange(context.Background(), msg)
+	}
 }

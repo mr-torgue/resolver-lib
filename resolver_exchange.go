@@ -3,10 +3,11 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver/dnssec"
 	"sync/atomic"
 	"time"
+
+	"github.com/miekg/dns"
+	"github.com/nsmithuk/resolver/dnssec"
 )
 
 // We have a public Exchange(), so people can call it.
