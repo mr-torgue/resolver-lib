@@ -1,4 +1,4 @@
-module github.com/nsmithuk/resolver
+module github.com/mr-torgue/resolver-lib
 
 go 1.25.0
 
@@ -32,4 +32,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/miekg/dns => github.com/mr-torgue/dns v1.0.1
+replace github.com/miekg/dns => github.com/mr-torgue/dns v1.0.4
