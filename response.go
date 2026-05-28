@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver/dnssec"
+	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
 type Response struct {

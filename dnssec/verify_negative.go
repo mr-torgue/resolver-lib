@@ -2,8 +2,9 @@ package dnssec
 
 import (
 	"context"
+
 	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver/dnssec/doe"
+	"github.com/mr-torgue/resolver-lib/dnssec/doe"
 )
 
 func validateNegativeResponse(ctx context.Context, r *result) (AuthenticationResult, error) {

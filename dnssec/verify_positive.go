@@ -2,7 +2,8 @@ package dnssec
 
 import (
 	"context"
-	"github.com/nsmithuk/resolver/dnssec/doe"
+
+	"github.com/mr-torgue/resolver-lib/dnssec/doe"
 )
 
 func validatePositiveResponse(ctx context.Context, r *result) (status AuthenticationResult, err error) {

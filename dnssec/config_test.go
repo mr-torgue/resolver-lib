@@ -5,7 +5,7 @@ import (
 
 	"github.com/coredns/coredns/plugin/test"
 	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver/dnssec"
+	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/stretchr/testify/assert"
 )
 

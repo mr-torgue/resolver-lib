@@ -7,7 +7,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver"
+	"github.com/mr-torgue/resolver-lib"
 )
 
 func main() {

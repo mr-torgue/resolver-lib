@@ -3,8 +3,9 @@ package dnssec
 import (
 	"context"
 	"fmt"
+
 	"github.com/miekg/dns"
-	"github.com/nsmithuk/resolver/dnssec/doe"
+	"github.com/mr-torgue/resolver-lib/dnssec/doe"
 )
 
 func validateDelegatingResponse(ctx context.Context, r *result) (AuthenticationResult, error) {

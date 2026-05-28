@@ -3,7 +3,7 @@ package resolver
 import (
 	"time"
 
-	"github.com/nsmithuk/resolver/dnssec"
+	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
 const (
