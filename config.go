@@ -89,24 +89,40 @@ func init() {
 	}
 }
 
+// The Config struct (c) contains the global configuration for the resolver.
+// It does only do some basic checking.
+// At some point, we should move the complete configuration to this struct.
+
+var c *Config = &DefaultConfig
+
 type Config struct {
-	rootZoneFile   string
-	rootAnchorFile string
+	rootZoneFile       string
+	rootAnchorFile     string
+	protocols          []string // specifies the client in order (example: [doq, udp, tcp])
+	insecureSkipVerify bool     // indicates if we check tls or not
+}
+
+// DefaultConfig is a working default config.
+var DefaultConfig = Config{
+	rootZoneFile:       DefaultRootzone,
+	rootAnchorFile:     DefaultRootanchors,
+	protocols:          []string{"udp", "tcp"},
+	insecureSkipVerify: true,
 }
 
 type Option func(*Config)
 
+// SetConfig sets the configuration based on the provided options.
+func SetConfig(options ...Option) {
+	c = ConfigBuilder(options...)
+}
+
 // ConfigBuilder builds a configuration based on the provided options.
 func ConfigBuilder(options ...Option) *Config {
-	c := &Config{
-		rootZoneFile:   DefaultRootzone,
-		rootAnchorFile: DefaultRootanchors,
-	}
+	c := &DefaultConfig
 	for _, o := range options {
 		o(c)
 	}
-	// load files
-
 	return c
 }
 
@@ -115,5 +131,28 @@ func WithCustomRoot(filename string, anchorfilename string) Option {
 	return func(c *Config) {
 		c.rootZoneFile = filename
 		c.rootAnchorFile = anchorfilename
+	}
+}
+
+// WithClients specifies which clients the resolver will use (in order of importance).
+func WithClients(clients []string) Option {
+	return func(c *Config) {
+		// check if clients are allowed
+		for _, client := range clients {
+			switch client {
+			case "udp", "tcp", "dot", "doq", "doh":
+			default:
+				panic("Only the following clients are supported: udp, tcp, dot, doq, and doh")
+			}
+		}
+		c.protocols = clients
+	}
+}
+
+// WithTLSVerification indicates if TLS verification is enabled.
+// In case of clients that don't use TLS, this option is ignored.
+func WithTLSVerification(verify bool) Option {
+	return func(c *Config) {
+		c.insecureSkipVerify = !verify
 	}
 }

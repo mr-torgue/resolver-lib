@@ -22,7 +22,8 @@ func main() {
 		fmt.Println("Query: " + s)
 	}
 
-	r := resolver.NewResolver(*resolver.ConfigBuilder(resolver.WithCustomRoot("testdata/rootzones/custom.root", "testdata/rootanchors/custom-valid.xml")))
+	//r := resolver.NewResolver(*resolver.ConfigBuilder(resolver.WithCustomRoot("testdata/rootzones/custom.root", "testdata/rootanchors/custom-valid.xml")))
+	r := resolver.NewResolver(*resolver.ConfigBuilder())
 
 	msg := new(dns.Msg)
 

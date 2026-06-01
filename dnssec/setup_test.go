@@ -1,14 +1,12 @@
 package dnssec
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
-	"github.com/mr-torgue/dns"
 	"io"
 	"strings"
 	"time"
+
+	"github.com/mr-torgue/dns"
+	"github.com/mr-torgue/dns/pkg/go-openssl"
 )
 
 const DnskeyFlagCsk = 257
@@ -43,7 +41,7 @@ func newRR(s string) dns.RR {
 type testKey struct {
 	key    *dns.DNSKEY
 	ds     *dns.DS
-	signer crypto.Signer
+	signer openssl.PrivateKey
 }
 
 func testRsaKey() *testKey {
@@ -62,11 +60,10 @@ func testRsaKey() *testKey {
 	if err != nil {
 		panic(err)
 	}
-	signer, _ := secret.(*rsa.PrivateKey)
 	return &testKey{
 		ds:     dnskey.ToDS(dns.SHA256),
 		key:    dnskey,
-		signer: signer,
+		signer: secret,
 	}
 }
 
@@ -86,11 +83,10 @@ func testEcKey() *testKey {
 	if err != nil {
 		panic(err)
 	}
-	signer, _ := secret.(*ecdsa.PrivateKey)
 	return &testKey{
 		ds:     dnskey.ToDS(dns.SHA256),
 		key:    dnskey,
-		signer: signer,
+		signer: secret,
 	}
 }
 
@@ -117,11 +113,10 @@ func testED25519KeyFromReader(publicReader, secretReader io.Reader) *testKey {
 	if err != nil {
 		panic(err)
 	}
-	signer, _ := secret.(ed25519.PrivateKey)
 	return &testKey{
 		ds:     dnskey.ToDS(dns.SHA256),
 		key:    dnskey,
-		signer: signer,
+		signer: secret,
 	}
 }
 

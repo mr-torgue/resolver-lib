@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/coredns/coredns/plugin/test"
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/stretchr/testify/assert"
 )
@@ -29,8 +29,9 @@ func TestLoadAnchors(t *testing.T) {
 			name:       "custom root-anchors",
 			anchorfile: "../testdata/rootanchors/custom-valid.xml",
 			expectedAnswer: []*dns.DS{
-				test.DS(".	86400	IN	DS	20537 15 2 1D551A7E4DA7AC1EB4311D44FEF74981213DEFA8E85CAED00ABB53BF"),
-				test.DS(".  86400   IN  DS  50759  8 2 0D1B5D1A7125BD5DF626FD6563ABC4B2C40905D06E62DE7D99EBFB08"),
+				test.DS(".	86400	IN	DS	20537 15 2 1D551A7E4DA7AC1EB4311D44FEF74981213DEFA8E85CAED00ABB53BFF9123EC7"),
+				test.DS(".  86400   IN  DS  50759  8 2 0D1B5D1A7125BD5DF626FD6563ABC4B2C40905D06E62DE7D99EBFB081F7C1E6B"),
+				test.DS(".  86400   IN  DS  52003  18 2 47669C32ACC67DAEC3F459B696153FB1AA8E3CE9B61BB50DBD49A5316B271126"),
 			},
 		},
 		//{"invalid root-anchors", "testdata/rootanchors/root-anchors.xml"},

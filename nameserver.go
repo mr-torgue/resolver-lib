@@ -3,11 +3,11 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/mr-torgue/dns"
+	"github.com/mr-torgue/resolver-lib/clients"
 )
 
 // dnsClientFactory defines a factory function for creating a DNS client.
@@ -36,7 +36,7 @@ func (*nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	if protocol == "tcp" {
 		timeout = DefaultTimeoutTCP
 	}
-	return &dns.Client{Net: protocol, Timeout: timeout}
+	return &clients.ClassicClient{Port: "53", Client: &dns.Client{Net: protocol, Timeout: timeout}}
 }
 
 func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Response {
@@ -54,14 +54,11 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 		return newResponseError(fmt.Errorf("%w in zone [%s]", ErrNilMessageSentToExchange, zoneName))
 	}
 
-	// Formats correctly for both ipv4 and ipv6.
-	addr := net.JoinHostPort(nameserver.addr, "53")
-
 	r := Response{}
-	for _, protocol := range []string{"udp", "tcp"} {
+	for _, protocol := range c.protocols {
 		client := factory(protocol)
 
-		r.Msg, r.Duration, r.Err = client.ExchangeContext(ctx, m, addr)
+		r.Msg, r.Duration, r.Err = client.ExchangeContext(ctx, m, nameserver.addr)
 
 		//---
 
@@ -81,7 +78,7 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 			zoneName,
 			protocol,
 			nameserver.hostname,
-			addr,
+			nameserver.addr,
 		))
 
 		go nameserver.updateMetrics(protocol, r.Duration)

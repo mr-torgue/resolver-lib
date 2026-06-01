@@ -3,10 +3,12 @@ package resolver
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/mr-torgue/dns"
+	"github.com/mr-torgue/resolver-lib/clients"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -17,6 +19,7 @@ type MockDNSClient struct {
 }
 
 func (m *MockDNSClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr string) (*dns.Msg, time.Duration, error) {
+	addr = net.JoinHostPort(addr, "53")
 	args := m.Called(ctx, msg, addr)
 	return args.Get(0).(*dns.Msg), args.Get(1).(time.Duration), args.Error(2)
 }
@@ -239,11 +242,14 @@ func TestDefaultDnsClientFactory_UDP(t *testing.T) {
 	ns := &nameserver{addr: "2001:db8::1"}
 
 	client := ns.defaultDnsClientFactory("udp")
-	assert.IsType(t, new(dns.Client), client)
-	typedClient, ok := client.(*dns.Client)
+	// changed
+	assert.IsType(t, new(clients.ClassicClient), client)
+	assert.IsType(t, new(dns.Client), client.(*clients.ClassicClient).Client)
+	typedClient, ok := client.(*clients.ClassicClient)
 	assert.True(t, ok)
 	if ok {
-		assert.Equal(t, DefaultTimeoutUDP, typedClient.Timeout)
+		assert.Equal(t, DefaultTimeoutUDP, typedClient.Client.Timeout)
+		assert.Equal(t, "53", typedClient.Port)
 	}
 
 }
@@ -253,11 +259,14 @@ func TestDefaultDnsClientFactory_TCP(t *testing.T) {
 	ns := &nameserver{addr: "2001:db8::1"}
 
 	client := ns.defaultDnsClientFactory("tcp")
-	assert.IsType(t, new(dns.Client), client)
-	typedClient, ok := client.(*dns.Client)
+	// changed
+	assert.IsType(t, new(clients.ClassicClient), client)
+	assert.IsType(t, new(dns.Client), client.(*clients.ClassicClient).Client)
+	typedClient, ok := client.(*clients.ClassicClient)
 	assert.True(t, ok)
 	if ok {
-		assert.Equal(t, DefaultTimeoutTCP, typedClient.Timeout)
+		assert.Equal(t, DefaultTimeoutTCP, typedClient.Client.Timeout)
+		assert.Equal(t, "53", typedClient.Port)
 	}
 
 }
