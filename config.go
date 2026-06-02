@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"sync"
 	"time"
 
 	"github.com/mr-torgue/resolver-lib/dnssec"
@@ -20,8 +21,10 @@ const (
 	DefaultRemoveAuthoritySectionForPositiveAnswers  = true
 	DefaultRemoveAdditionalSectionForPositiveAnswers = true
 
-	DefaultTimeoutUDP = 150 * time.Millisecond
-	DefaultTimeoutTCP = 600 * time.Millisecond
+	DefaultTimeoutUDP = 400 * time.Millisecond
+	DefaultTimeoutTCP = 1000 * time.Millisecond
+	DefaultTimeoutDOQ = 1500 * time.Millisecond
+	DefaultTimeoutDOT = 1500 * time.Millisecond
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
@@ -93,37 +96,54 @@ func init() {
 // It does only do some basic checking.
 // At some point, we should move the complete configuration to this struct.
 
-var c *Config = &DefaultConfig
+var (
+	config *Config = &DefaultConfig
+	mu     sync.Mutex
+)
 
 type Config struct {
-	rootZoneFile       string
-	rootAnchorFile     string
-	protocols          []string // specifies the client in order (example: [doq, udp, tcp])
-	insecureSkipVerify bool     // indicates if we check tls or not
+	rootZoneFile   string
+	rootAnchorFile string
+	client         string
+	protocols      []string // specifies the clients in order (example: [doq, udp, tcp])
+	// timeout for connections, we need them individually because of fallbacks
+	udpTimeout         time.Duration
+	tcpTimeout         time.Duration
+	doqTimeout         time.Duration
+	dotTimeout         time.Duration
+	insecureSkipVerify bool // indicates if we check tls or not
 }
 
 // DefaultConfig is a working default config.
 var DefaultConfig = Config{
 	rootZoneFile:       DefaultRootzone,
 	rootAnchorFile:     DefaultRootanchors,
+	client:             "udp",
 	protocols:          []string{"udp", "tcp"},
-	insecureSkipVerify: true,
+	udpTimeout:         DefaultTimeoutUDP,
+	tcpTimeout:         DefaultTimeoutTCP,
+	doqTimeout:         DefaultTimeoutDOQ,
+	dotTimeout:         DefaultTimeoutDOT,
+	insecureSkipVerify: false,
 }
 
 type Option func(*Config)
 
-// SetConfig sets the configuration based on the provided options.
-func SetConfig(options ...Option) {
-	c = ConfigBuilder(options...)
+// SetConfig sets the configuration.
+// Note
+func SetConfig(c *Config) {
+	mu.Lock()
+	defer mu.Unlock()
+	config = c
 }
 
 // ConfigBuilder builds a configuration based on the provided options.
 func ConfigBuilder(options ...Option) *Config {
-	c := &DefaultConfig
+	c := DefaultConfig
 	for _, o := range options {
-		o(c)
+		o(&c)
 	}
-	return c
+	return &c
 }
 
 // WithCustomRoot overwrites the standard rootzone and anchors.
@@ -134,18 +154,37 @@ func WithCustomRoot(filename string, anchorfilename string) Option {
 	}
 }
 
-// WithClients specifies which clients the resolver will use (in order of importance).
-func WithClients(clients []string) Option {
+// WithClients specifies which client to use.
+// Supported: doq, doh, dot, udp, and tcp.
+// Fallback can be enabled.
+func WithClient(client string, fallback bool) Option {
 	return func(c *Config) {
 		// check if clients are allowed
-		for _, client := range clients {
-			switch client {
-			case "udp", "tcp", "dot", "doq", "doh":
-			default:
-				panic("Only the following clients are supported: udp, tcp, dot, doq, and doh")
+		switch client {
+		case "udp":
+			if fallback {
+				c.protocols = []string{"udp", "tcp"}
+			} else {
+				c.protocols = []string{"udp"}
 			}
+		case "tcp":
+			c.protocols = []string{"tcp"}
+		case "dot":
+			if fallback {
+				c.protocols = []string{"dot", "udp", "tcp"}
+			} else {
+				c.protocols = []string{"dot"}
+			}
+		case "doq":
+			if fallback {
+				c.protocols = []string{"doq", "udp", "tcp"}
+			} else {
+				c.protocols = []string{"doq"}
+			}
+		default:
+			panic("Only the following clients are supported: udp, tcp, dot, and doq")
 		}
-		c.protocols = clients
+		c.client = client
 	}
 }
 
@@ -154,5 +193,15 @@ func WithClients(clients []string) Option {
 func WithTLSVerification(verify bool) Option {
 	return func(c *Config) {
 		c.insecureSkipVerify = !verify
+	}
+}
+
+// WithTimeouts sets the timeouts for connections.
+func WithTimeouts(udp, tcp, tls, quic time.Duration) Option {
+	return func(c *Config) {
+		c.udpTimeout = udp
+		c.tcpTimeout = tcp
+		c.dotTimeout = tls
+		c.doqTimeout = quic
 	}
 }

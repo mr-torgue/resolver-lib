@@ -21,9 +21,12 @@ func main() {
 	resolver.Query = func(s string) {
 		fmt.Println("Query: " + s)
 	}
+	resolver.Debug = func(s string) {
+		fmt.Println("Query: " + s)
+	}
 
 	//r := resolver.NewResolver(*resolver.ConfigBuilder(resolver.WithCustomRoot("testdata/rootzones/custom.root", "testdata/rootanchors/custom-valid.xml")))
-	r := resolver.NewResolver(*resolver.ConfigBuilder())
+	r := resolver.NewResolver(resolver.ConfigBuilder(resolver.WithClient("doq", true)))
 
 	msg := new(dns.Msg)
 

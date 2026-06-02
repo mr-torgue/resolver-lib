@@ -25,7 +25,8 @@ type resolverFunctions struct {
 	getExchanger         func() exchanger
 }
 
-func NewResolver(config Config) *Resolver {
+func NewResolver(config *Config) *Resolver {
+	SetConfig(config)
 	// load files
 	dnssec.LoadAnchors(config.rootAnchorFile)
 	rootZone, err := os.ReadFile(config.rootZoneFile)

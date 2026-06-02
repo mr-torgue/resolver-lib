@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/miekg/dns"
+	"github.com/mr-torgue/dns"
 	"github.com/quic-go/quic-go"
 )
 
@@ -24,7 +24,14 @@ type DOQClient struct {
 func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr string) (rsp *dns.Msg, rtt time.Duration, err error) {
 
 	addr = net.JoinHostPort(addr, c.Port)
-	session, err := quic.DialAddr(ctx, addr, c.TLSConfig, nil)
+	// use a smaller timeout
+	readCtx, cancelConnect := context.WithTimeout(ctx, c.Timeout)
+	defer cancelConnect()
+	session, err := quic.DialAddr(readCtx, addr, c.TLSConfig, nil)
+	// NOTE: is there a simpler way to detect if a server supports QUIC instead of relying on timeouts?
+	if err != nil {
+		return nil, 0, err
+	}
 	defer session.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
 	// ref: https://www.rfc-editor.org/rfc/rfc9250.html#name-dns-message-ids
 	msg.Id = 0
@@ -92,6 +99,8 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	if packetLen != uint16(len(buf[2:])) {
 		return nil, rtt, fmt.Errorf("packet length mismatch")
 	}
+	// prepare the result
+	rsp = new(dns.Msg)
 	if err = rsp.Unpack(buf[2:]); err != nil {
 		return nil, rtt, err
 	}

@@ -3,7 +3,11 @@ package resolver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +15,7 @@ import (
 	"github.com/mr-torgue/resolver-lib/clients"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // Mock DNS Client
@@ -269,4 +274,264 @@ func TestDefaultDnsClientFactory_TCP(t *testing.T) {
 		assert.Equal(t, "53", typedClient.Port)
 	}
 
+}
+
+// ---------------------- NEW TESTS
+
+// match returns true if rr is in the expectedRRs slice
+func match(rr dns.RR, expectedRRs []ExpectedRR) (bool, int) {
+	for i, expectedRR := range expectedRRs {
+		if expectedRR.qtype == rr.Header().Rrtype && strings.Contains(rr.String(), expectedRR.value) {
+			return true, i
+		}
+	}
+	return false, 0
+}
+
+// matchall returns true iff rrs and expectedRRs are the same
+func matchall(rrs []dns.RR, expectedRRs []ExpectedRR) bool {
+	matchedIndices := make(map[int]bool)
+	for _, rr := range rrs {
+		matched, index := match(rr, expectedRRs)
+		if matched {
+			if matchedIndices[index] {
+				return false
+			}
+			matchedIndices[index] = true
+		}
+	}
+	return len(matchedIndices) == len(expectedRRs)
+}
+
+type ExpectedRR struct {
+	qtype uint16
+	value string
+}
+
+type TestCase struct {
+	name              string
+	qname             string
+	qtype             uint16
+	rcode             int
+	rd                bool
+	expectedNrAnswers int
+	expectedAnswers   []ExpectedRR
+	expectedNrAuth    int
+	expectedAuth      []ExpectedRR
+	expectedNrExtra   int
+	expectedExtra     []ExpectedRR
+	expectedError     bool
+}
+
+// Test_exchange tests the NS exchange function with multiple clients.
+func Test_exchange(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		hostname           string
+		addr               string
+		client             string
+		expectedFactory    string
+		expectedClient     string
+		insecureSkipVerify bool
+		expectPanic        bool
+		testCases          []TestCase
+	}{
+		{
+			name:               "Github nameserver with UDP",
+			hostname:           "dns1.p08.nsone.net.",
+			addr:               "198.51.44.8",
+			client:             "udp",
+			expectedFactory:    "defaultDnsClientFactory",
+			expectedClient:     "*clients.ClassicClient",
+			insecureSkipVerify: false,
+			testCases: []TestCase{
+				{
+					name:              "[UDP] Client should return A record and CNAME record of www.github.com ",
+					qname:             "www.github.com",
+					qtype:             dns.TypeA,
+					rcode:             dns.RcodeSuccess,
+					expectedNrAnswers: 2,
+					expectedAnswers: []ExpectedRR{
+						{dns.TypeA, "4.237.22.38"},
+						{dns.TypeCNAME, "github.com."},
+					},
+					expectedNrAuth: 0,
+					expectedAuth:   []ExpectedRR{},
+				},
+			},
+		},
+		{
+			name:               "Github nameserver with QUIC",
+			hostname:           "dns.quad9.net.",
+			addr:               "9.9.9.9",
+			client:             "doq",
+			expectedFactory:    "doqClientFactory",
+			expectedClient:     "*clients.DOQClient",
+			insecureSkipVerify: false,
+			testCases: []TestCase{
+				{
+					name:              "[DOQ] Client should return A record and CNAME record of www.github.com ",
+					qname:             "www.github.com",
+					qtype:             dns.TypeA,
+					rcode:             dns.RcodeSuccess,
+					rd:                true,
+					expectedNrAnswers: 2,
+					expectedAnswers: []ExpectedRR{
+						{dns.TypeA, "4.237.22.38"},
+						{dns.TypeCNAME, "github.com."},
+					},
+					expectedNrAuth: 0,
+					expectedAuth:   []ExpectedRR{},
+				},
+			},
+		},
+		{
+			name:               "Github nameserver with QUIC (should not work)",
+			hostname:           "dns1.p08.nsone.net.",
+			addr:               "198.51.44.8",
+			client:             "doq",
+			expectedFactory:    "doqClientFactory",
+			expectedClient:     "*clients.DOQClient",
+			insecureSkipVerify: false,
+			testCases: []TestCase{
+				{
+					name:          "[DOQ] Client should return A record and CNAME record of www.github.com ",
+					qname:         "www.github.com",
+					qtype:         dns.TypeA,
+					rcode:         dns.RcodeSuccess,
+					expectedError: true,
+				},
+			},
+		},
+	}
+	for _, ttconfig := range tests {
+		var got *nameserver
+		if ttconfig.expectPanic {
+			assert.Panics(t, func() {
+				SetConfig(ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify)))
+			})
+		} else {
+			SetConfig(ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify)))
+			got = newNameserver(ttconfig.hostname, ttconfig.addr, ttconfig.client)
+			assert.Equal(t, ttconfig.hostname, got.hostname)
+			assert.Equal(t, ttconfig.addr, got.addr)
+			// test factory
+			funcName := runtime.FuncForPC(reflect.ValueOf(got.dnsClientFactory).Pointer()).Name()
+			assert.Contains(t, funcName, ttconfig.expectedFactory)
+			client := got.dnsClientFactory(ttconfig.client)
+			gotType := fmt.Sprintf("%T", client)
+			assert.Equal(t, ttconfig.expectedClient, gotType)
+		}
+		for _, tt := range ttconfig.testCases {
+			t.Run(tt.name, func(t *testing.T) {
+				msg := new(dns.Msg)
+				msg.SetQuestion(dns.Fqdn(tt.qname), dns.TypeA)
+				msg.RecursionDesired = tt.rd
+				ctx := context.TODO()
+				rsp := got.exchange(ctx, msg)
+
+				require.NotNil(t, rsp, "response should not be nil") // it should always return something if qmsg != nil
+				if tt.expectedError {
+					assert.NotNil(t, rsp.Err)
+				} else {
+					require.Nil(t, rsp.Err)
+					rmsg := rsp.Msg
+					require.NotNil(t, rmsg, "rmsg should not be nil")
+					assert.Equal(t, tt.rcode, rmsg.Rcode, "rcodes should match")
+					assert.Equal(t, tt.expectedNrAnswers, len(rmsg.Answer), "expected a different number of results")
+					if len(tt.expectedAnswers) > 0 {
+						assert.True(t, matchall(rmsg.Answer, tt.expectedAnswers), "matchall for answers failed")
+					}
+					if len(tt.expectedAuth) > 0 {
+						assert.True(t, matchall(rmsg.Ns, tt.expectedAuth), "matchall for authoritative failed")
+					}
+					if len(tt.expectedExtra) > 0 {
+						assert.True(t, matchall(rmsg.Extra, tt.expectedExtra), "matchall for additional failed")
+					}
+				}
+			})
+		}
+	}
+}
+
+// Tests_newNameserver tests if nameservers get created correctly.
+func Test_newNameserver(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		hostname           string
+		addr               string
+		client             string
+		expectedFactory    string
+		expectedClient     string
+		insecureSkipVerify bool
+		expectPanic        bool
+	}{
+		{
+			name:               "Empty config, should fail",
+			hostname:           "",
+			addr:               "",
+			client:             "",
+			insecureSkipVerify: false,
+			expectPanic:        true,
+		},
+		{
+			name:               "NS with UDP client",
+			hostname:           "name",
+			addr:               "1",
+			client:             "udp",
+			expectedFactory:    "defaultDnsClientFactory",
+			expectedClient:     "*clients.ClassicClient",
+			insecureSkipVerify: false,
+		},
+		{
+			name:               "NS with DoQ client",
+			hostname:           "name",
+			addr:               "1",
+			client:             "doq",
+			expectedFactory:    "doqClientFactory",
+			expectedClient:     "*clients.DOQClient",
+			insecureSkipVerify: false,
+		},
+		{
+			name:               "NS with DoT client",
+			hostname:           "name",
+			addr:               "1",
+			client:             "dot",
+			expectedFactory:    "dotClientFactory",
+			expectedClient:     "*clients.ClassicClient",
+			insecureSkipVerify: false,
+		},
+		{
+			name:               "NS with TCP client",
+			hostname:           "name",
+			addr:               "1",
+			client:             "tcp",
+			expectedFactory:    "defaultDnsClientFactory",
+			expectedClient:     "*clients.ClassicClient",
+			insecureSkipVerify: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectPanic {
+				assert.Panics(t, func() {
+					SetConfig(ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify)))
+				})
+			} else {
+				SetConfig(ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify)))
+				got := newNameserver(tt.hostname, tt.addr, tt.client)
+				assert.Equal(t, tt.hostname, got.hostname)
+				assert.Equal(t, tt.addr, got.addr)
+				// test factory
+				funcName := runtime.FuncForPC(reflect.ValueOf(got.dnsClientFactory).Pointer()).Name()
+				assert.Contains(t, funcName, tt.expectedFactory)
+				client := got.dnsClientFactory(tt.client)
+				gotType := fmt.Sprintf("%T", client)
+				assert.Equal(t, tt.expectedClient, gotType)
+
+			}
+		})
+	}
 }

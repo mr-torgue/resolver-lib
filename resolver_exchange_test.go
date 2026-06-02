@@ -987,7 +987,7 @@ func TestResolver_FinaliseResponse_Opt(t *testing.T) {
 }
 
 func BenchmarkResolver_Exchange(b *testing.B) {
-	resolver := NewResolver(Config{})
+	resolver := NewResolver(&Config{})
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn("github.com"), dns.TypeA)
 	msg.SetEdns0(4096, false)

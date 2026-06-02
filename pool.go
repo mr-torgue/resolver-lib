@@ -148,17 +148,11 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR) *nameserverPool {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, &nameserver{
-				hostname: addr.Header().Name,
-				addr:     addr.A.String(),
-			})
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), config.client))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, &nameserver{
-				hostname: addr.Header().Name,
-				addr:     addr.AAAA.String(),
-			})
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), config.client))
 		}
 
 	}
@@ -198,17 +192,11 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, &nameserver{
-				hostname: addr.Header().Name,
-				addr:     addr.A.String(),
-			})
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), config.client))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, &nameserver{
-				hostname: addr.Header().Name,
-				addr:     addr.AAAA.String(),
-			})
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), config.client))
 		}
 	}
 
