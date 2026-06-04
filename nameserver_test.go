@@ -378,7 +378,7 @@ func Test_exchange(t *testing.T) {
 					rd:                true,
 					expectedNrAnswers: 2,
 					expectedAnswers: []ExpectedRR{
-						{dns.TypeA, "4.237.22.38"},
+						{dns.TypeA, "140.82.116.4"},
 						{dns.TypeCNAME, "github.com."},
 					},
 					expectedNrAuth: 0,

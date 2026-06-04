@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/mr-torgue/dns"
-	"github.com/mr-torgue/dns/pkg/go-openssl"
+	"github.com/mr-torgue/go-openssl"
 )
 
 const DnskeyFlagCsk = 257
