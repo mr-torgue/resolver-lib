@@ -83,15 +83,9 @@ func buildRootServerPool(rootZone string) (*nameserverPool, error) {
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		switch rr := rr.(type) {
 		case *dns.A:
-			pool.ipv4 = append(pool.ipv4, &nameserver{
-				hostname: canonicalName(rr.Header().Name),
-				addr:     rr.A.String(),
-			})
+			pool.ipv4 = append(pool.ipv4, newNameserver(rr.Header().Name, rr.A.String(), GlobalConfig.client))
 		case *dns.AAAA:
-			pool.ipv6 = append(pool.ipv6, &nameserver{
-				hostname: canonicalName(rr.Header().Name),
-				addr:     rr.AAAA.String(),
-			})
+			pool.ipv6 = append(pool.ipv6, newNameserver(rr.Header().Name, rr.AAAA.String(), GlobalConfig.client))
 		default:
 			// Continue
 		}

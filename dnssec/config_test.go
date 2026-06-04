@@ -34,6 +34,13 @@ func TestLoadAnchors(t *testing.T) {
 				test.DS(".  86400   IN  DS  52003  18 2 47669C32ACC67DAEC3F459B696153FB1AA8E3CE9B61BB50DBD49A5316B271126"),
 			},
 		},
+		{
+			name:       "custom root-anchors 2",
+			anchorfile: "../testdata/rootanchors/custom-valid-2.xml",
+			expectedAnswer: []*dns.DS{
+				test.DS(".  86400   IN  DS  52003  18 2 47669C32ACC67DAEC3F459B696153FB1AA8E3CE9B61BB50DBD49A5316B271126"),
+			},
+		},
 		//{"invalid root-anchors", "testdata/rootanchors/root-anchors.xml"},
 		//{"custom root-anchors", "testdata/rootanchors/root-anchors.xml"},
 	}
