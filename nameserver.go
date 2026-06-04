@@ -36,9 +36,9 @@ type nameserver struct {
 }
 
 func (*nameserver) defaultDnsClientFactory(protocol string) dnsClient {
-	timeout := config.udpTimeout
+	timeout := GlobalConfig.udpTimeout
 	if protocol == "tcp" {
-		timeout = config.tcpTimeout
+		timeout = GlobalConfig.tcpTimeout
 	}
 	return &clients.ClassicClient{Port: "53", Client: &dns.Client{Net: protocol, Timeout: timeout}}
 }
@@ -51,9 +51,9 @@ func (n *nameserver) doqClientFactory(protocol string) dnsClient {
 			tlsconf := &tls.Config{
 				NextProtos:         []string{"doq"},
 				ServerName:         dns.Fqdn(n.hostname),
-				InsecureSkipVerify: config.insecureSkipVerify,
+				InsecureSkipVerify: GlobalConfig.insecureSkipVerify,
 			}
-			n.quicClient = &clients.DOQClient{TLSConfig: tlsconf, Port: "853", Timeout: config.doqTimeout}
+			n.quicClient = &clients.DOQClient{TLSConfig: tlsconf, Port: "853", Timeout: GlobalConfig.doqTimeout}
 		}
 		return n.quicClient
 	}
@@ -64,10 +64,10 @@ func (n *nameserver) dotClientFactory(protocol string) dnsClient {
 	if protocol == "dot" {
 		return &clients.ClassicClient{Port: "853", Client: &dns.Client{
 			Net:     "tcp-tls",
-			Timeout: config.dotTimeout,
+			Timeout: GlobalConfig.dotTimeout,
 			TLSConfig: &tls.Config{
 				ServerName:         dns.Fqdn(n.hostname),
-				InsecureSkipVerify: config.insecureSkipVerify,
+				InsecureSkipVerify: GlobalConfig.insecureSkipVerify,
 			},
 		}}
 	}
@@ -118,7 +118,7 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 	}
 
 	r := Response{}
-	for _, protocol := range config.protocols {
+	for _, protocol := range GlobalConfig.protocols {
 		client := factory(protocol)
 
 		r.Msg, r.Duration, r.Err = client.ExchangeContext(ctx, m, nameserver.addr)

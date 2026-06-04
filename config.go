@@ -97,8 +97,8 @@ func init() {
 // At some point, we should move the complete configuration to this struct.
 
 var (
-	config *Config = &DefaultConfig
-	mu     sync.Mutex
+	GlobalConfig *Config = &DefaultConfig
+	mu           sync.Mutex
 )
 
 type Config struct {
@@ -114,7 +114,7 @@ type Config struct {
 	insecureSkipVerify bool // indicates if we check tls or not
 }
 
-// DefaultConfig is a working default config.
+// DefaultConfig is a working default GlobalConfig.
 var DefaultConfig = Config{
 	rootZoneFile:       DefaultRootzone,
 	rootAnchorFile:     DefaultRootanchors,
@@ -134,7 +134,7 @@ type Option func(*Config)
 func SetConfig(c *Config) {
 	mu.Lock()
 	defer mu.Unlock()
-	config = c
+	GlobalConfig = c
 }
 
 // ConfigBuilder builds a configuration based on the provided options.
