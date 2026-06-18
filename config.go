@@ -134,6 +134,11 @@ var DefaultConfig = Config{
 	tcpTimeout:         DefaultTimeoutTCP,
 	doqTimeout:         DefaultTimeoutDOQ,
 	dotTimeout:         DefaultTimeoutDOT,
+	dnsPort:            DefaultDNSPort,
+	doqPort:            DefaultDoQPort,
+	dotPort:            DefaultDoTPort,
+	tlsCache:           tls.NewLRUClientSessionCache(DefaultCacheSize),
+	pqcMode:            false,
 	insecureSkipVerify: false,
 }
 
@@ -205,11 +210,40 @@ func WithTLSVerification(verify bool) Option {
 	}
 }
 
-//func WithTLSCache(int capacity) Option {
-//	return func(c *Config) {
-//		c.insecureSkipVerify = !verify
-//	}
-//}
+// WithTLSCache indicates the cache size.
+func WithTLSCache(capacity int) Option {
+	return func(c *Config) {
+		c.tlsCache = tls.NewLRUClientSessionCache(capacity)
+	}
+}
+
+// WithPQCMode turns the pqc mode on or off.
+func WithPQCMode(pqcMode bool) Option {
+	return func(c *Config) {
+		c.pqcMode = pqcMode
+	}
+}
+
+// WithCustomDNSPort changes the default port for UDP/TCP.
+func WithCustomDNSPort(dnsPort int) Option {
+	return func(c *Config) {
+		c.dnsPort = dnsPort
+	}
+}
+
+// WithCustomDoQPort changes the default port for DoQ.
+func WithCustomDoQPort(doqPort int) Option {
+	return func(c *Config) {
+		c.doqPort = doqPort
+	}
+}
+
+// WithCustomDoTPort changes the default port for DoT.
+func WithCustomDoTPort(dotPort int) Option {
+	return func(c *Config) {
+		c.dotPort = dotPort
+	}
+}
 
 // WithTimeouts sets the timeouts for connections.
 func WithTimeouts(udp, tcp, tls, quic time.Duration) Option {

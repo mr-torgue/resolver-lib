@@ -520,3 +520,25 @@ func Test_newNameserver(t *testing.T) {
 		})
 	}
 }
+
+func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for receiver constructor.
+		hostname string
+		addr     string
+		// Named input parameters for target function.
+		protocol string
+		want     dnsClient
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := newNameserver(tt.hostname, tt.addr)
+			got := n.defaultDnsClientFactory(tt.protocol)
+			assert.Equal(t, got, tt.want) // check if right client is returned
+			// check tls settings
+		})
+	}
+}

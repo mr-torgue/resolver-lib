@@ -14,7 +14,11 @@ func TestSetConfig(t *testing.T) {
 		rootanchor         string
 		client             string
 		protocols          []string
+		dnsPort            int
+		doqPort            int
+		dotPort            int
 		insecureSkipVerify bool
+		pqcMode            bool
 		fallback           bool
 		expectPanic        bool
 	}{
@@ -111,6 +115,11 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, DefaultTimeoutTCP, GlobalConfig.tcpTimeout)
 	assert.Equal(t, DefaultTimeoutDOQ, GlobalConfig.doqTimeout)
 	assert.Equal(t, DefaultTimeoutDOT, GlobalConfig.dotTimeout)
+	assert.Equal(t, DefaultDNSPort, GlobalConfig.dnsPort)
+	assert.Equal(t, DefaultDoQPort, GlobalConfig.doqPort)
+	assert.Equal(t, DefaultDoTPort, GlobalConfig.dotPort)
+	assert.NotNil(t, GlobalConfig.tlsCache)
+	assert.False(t, GlobalConfig.pqcMode)
 	assert.Equal(t, false, GlobalConfig.insecureSkipVerify)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,6 +147,16 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, time.Duration(789), GlobalConfig.dotTimeout)
 	assert.Equal(t, time.Duration(100), GlobalConfig.doqTimeout)
 
+	// test custom ports
+	SetConfig(ConfigBuilder(WithCustomDNSPort(1234), WithCustomDoQPort(8853), WithCustomDoTPort(153)))
+	assert.Equal(t, 1234, GlobalConfig.dnsPort)
+	assert.Equal(t, 8853, GlobalConfig.doqPort)
+	assert.Equal(t, 153, GlobalConfig.dotPort)
+
+	// test pqc mode
+	SetConfig(ConfigBuilder(WithPQCMode(true)))
+	assert.True(t, GlobalConfig.pqcMode)
+
 	SetConfig(&DefaultConfig) // reset config
 	assert.Equal(t, []string{"udp", "tcp"}, GlobalConfig.protocols)
 	assert.Equal(t, DefaultRootanchors, GlobalConfig.rootAnchorFile)
@@ -146,5 +165,10 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, DefaultTimeoutTCP, GlobalConfig.tcpTimeout)
 	assert.Equal(t, DefaultTimeoutDOQ, GlobalConfig.doqTimeout)
 	assert.Equal(t, DefaultTimeoutDOT, GlobalConfig.dotTimeout)
+	assert.Equal(t, DefaultDNSPort, GlobalConfig.dnsPort)
+	assert.Equal(t, DefaultDoQPort, GlobalConfig.doqPort)
+	assert.Equal(t, DefaultDoTPort, GlobalConfig.dotPort)
+	assert.NotNil(t, GlobalConfig.tlsCache)
+	assert.False(t, GlobalConfig.pqcMode)
 	assert.Equal(t, false, GlobalConfig.insecureSkipVerify)
 }
