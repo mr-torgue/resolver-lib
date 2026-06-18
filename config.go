@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"crypto/tls"
 	"sync"
 	"time"
 
@@ -28,6 +29,8 @@ const (
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
+
+	DefaultCacheSize = 1024
 )
 
 var (
@@ -104,13 +107,16 @@ var (
 type Config struct {
 	rootZoneFile   string
 	rootAnchorFile string
-	client         string
 	protocols      []string // specifies the clients in order (example: [doq, udp, tcp])
 	// timeout for connections, we need them individually because of fallbacks
-	udpTimeout         time.Duration
-	tcpTimeout         time.Duration
-	doqTimeout         time.Duration
-	dotTimeout         time.Duration
+	udpTimeout time.Duration
+	tcpTimeout time.Duration
+	doqTimeout time.Duration
+	dotTimeout time.Duration
+
+	// TLS settings
+	tlsCache           tls.ClientSessionCache
+	pqcMode            bool // if enabled we only use PQC-safe primitives
 	insecureSkipVerify bool // indicates if we check tls or not
 }
 
@@ -118,7 +124,6 @@ type Config struct {
 var DefaultConfig = Config{
 	rootZoneFile:       DefaultRootzone,
 	rootAnchorFile:     DefaultRootanchors,
-	client:             "udp",
 	protocols:          []string{"udp", "tcp"},
 	udpTimeout:         DefaultTimeoutUDP,
 	tcpTimeout:         DefaultTimeoutTCP,
@@ -184,7 +189,6 @@ func WithClient(client string, fallback bool) Option {
 		default:
 			panic("Only the following clients are supported: udp, tcp, dot, and doq")
 		}
-		c.client = client
 	}
 }
 
