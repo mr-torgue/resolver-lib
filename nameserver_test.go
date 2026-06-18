@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -331,7 +329,6 @@ func Test_exchange(t *testing.T) {
 		hostname           string
 		addr               string
 		client             string
-		expectedFactory    string
 		expectedClient     string
 		insecureSkipVerify bool
 		expectPanic        bool
@@ -342,7 +339,6 @@ func Test_exchange(t *testing.T) {
 			hostname:           "dns1.p08.nsone.net.",
 			addr:               "198.51.44.8",
 			client:             "udp",
-			expectedFactory:    "defaultDnsClientFactory",
 			expectedClient:     "*clients.ClassicClient",
 			insecureSkipVerify: false,
 			testCases: []TestCase{
@@ -366,7 +362,6 @@ func Test_exchange(t *testing.T) {
 			hostname:           "dns.quad9.net.",
 			addr:               "9.9.9.9",
 			client:             "doq",
-			expectedFactory:    "doqClientFactory",
 			expectedClient:     "*clients.DOQClient",
 			insecureSkipVerify: false,
 			testCases: []TestCase{
@@ -391,7 +386,6 @@ func Test_exchange(t *testing.T) {
 			hostname:           "dns1.p08.nsone.net.",
 			addr:               "198.51.44.8",
 			client:             "doq",
-			expectedFactory:    "doqClientFactory",
 			expectedClient:     "*clients.DOQClient",
 			insecureSkipVerify: false,
 			testCases: []TestCase{
@@ -413,13 +407,11 @@ func Test_exchange(t *testing.T) {
 			})
 		} else {
 			SetConfig(ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify)))
-			got = newNameserver(ttconfig.hostname, ttconfig.addr, ttconfig.client)
+			got = newNameserver(ttconfig.hostname, ttconfig.addr)
 			assert.Equal(t, ttconfig.hostname, got.hostname)
 			assert.Equal(t, ttconfig.addr, got.addr)
-			// test factory
-			funcName := runtime.FuncForPC(reflect.ValueOf(got.dnsClientFactory).Pointer()).Name()
-			assert.Contains(t, funcName, ttconfig.expectedFactory)
-			client := got.dnsClientFactory(ttconfig.client)
+			// test client
+			client := got.defaultDnsClientFactory(ttconfig.client)
 			gotType := fmt.Sprintf("%T", client)
 			assert.Equal(t, ttconfig.expectedClient, gotType)
 		}
@@ -463,7 +455,6 @@ func Test_newNameserver(t *testing.T) {
 		hostname           string
 		addr               string
 		client             string
-		expectedFactory    string
 		expectedClient     string
 		insecureSkipVerify bool
 		expectPanic        bool
@@ -481,7 +472,6 @@ func Test_newNameserver(t *testing.T) {
 			hostname:           "name",
 			addr:               "1",
 			client:             "udp",
-			expectedFactory:    "defaultDnsClientFactory",
 			expectedClient:     "*clients.ClassicClient",
 			insecureSkipVerify: false,
 		},
@@ -490,7 +480,6 @@ func Test_newNameserver(t *testing.T) {
 			hostname:           "name",
 			addr:               "1",
 			client:             "doq",
-			expectedFactory:    "doqClientFactory",
 			expectedClient:     "*clients.DOQClient",
 			insecureSkipVerify: false,
 		},
@@ -499,7 +488,6 @@ func Test_newNameserver(t *testing.T) {
 			hostname:           "name",
 			addr:               "1",
 			client:             "dot",
-			expectedFactory:    "dotClientFactory",
 			expectedClient:     "*clients.ClassicClient",
 			insecureSkipVerify: false,
 		},
@@ -508,7 +496,6 @@ func Test_newNameserver(t *testing.T) {
 			hostname:           "name",
 			addr:               "1",
 			client:             "tcp",
-			expectedFactory:    "defaultDnsClientFactory",
 			expectedClient:     "*clients.ClassicClient",
 			insecureSkipVerify: false,
 		},
@@ -521,13 +508,11 @@ func Test_newNameserver(t *testing.T) {
 				})
 			} else {
 				SetConfig(ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify)))
-				got := newNameserver(tt.hostname, tt.addr, tt.client)
+				got := newNameserver(tt.hostname, tt.addr)
 				assert.Equal(t, tt.hostname, got.hostname)
 				assert.Equal(t, tt.addr, got.addr)
-				// test factory
-				funcName := runtime.FuncForPC(reflect.ValueOf(got.dnsClientFactory).Pointer()).Name()
-				assert.Contains(t, funcName, tt.expectedFactory)
-				client := got.dnsClientFactory(tt.client)
+				// test client
+				client := got.defaultDnsClientFactory(tt.client)
 				gotType := fmt.Sprintf("%T", client)
 				assert.Equal(t, tt.expectedClient, gotType)
 

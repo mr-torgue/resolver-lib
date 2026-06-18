@@ -35,16 +35,7 @@ type nameserver struct {
 	protocolRatio       float32
 }
 
-func (*nameserver) defaultDnsClientFactory(protocol string) dnsClient {
-	timeout := GlobalConfig.udpTimeout
-	if protocol == "tcp" {
-		timeout = GlobalConfig.tcpTimeout
-	}
-	return &clients.ClassicClient{Port: "53", Client: &dns.Client{Net: protocol, Timeout: timeout}}
-}
-
-// doqClientFactory build the factory for a doq client.
-func (n *nameserver) doqClientFactory(protocol string) dnsClient {
+func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	if protocol == "doq" {
 		// set up client
 		if n.quicClient == nil {
@@ -56,49 +47,35 @@ func (n *nameserver) doqClientFactory(protocol string) dnsClient {
 			n.quicClient = &clients.DOQClient{TLSConfig: tlsconf, Port: "853", Timeout: GlobalConfig.doqTimeout}
 		}
 		return n.quicClient
-	}
-	return n.defaultDnsClientFactory(protocol)
-}
-
-func (n *nameserver) dotClientFactory(protocol string) dnsClient {
-	if protocol == "dot" {
-		return &clients.ClassicClient{Port: "853", Client: &dns.Client{
-			Net:     "tcp-tls",
-			Timeout: GlobalConfig.dotTimeout,
-			TLSConfig: &tls.Config{
+	} else if protocol == "dot" {
+		if n.tlsClient == nil {
+			tlsconf := &tls.Config{
 				ServerName:         dns.Fqdn(n.hostname),
 				InsecureSkipVerify: GlobalConfig.insecureSkipVerify,
-			},
-		}}
+			}
+			n.tlsClient = &clients.ClassicClient{Port: "853", Client: &dns.Client{
+				Net:       "tcp-tls",
+				Timeout:   GlobalConfig.dotTimeout,
+				TLSConfig: tlsconf,
+			}}
+		}
+		return n.tlsClient
 	}
-	return n.defaultDnsClientFactory(protocol)
-}
-
-// setDnsClientFactory sets ns.dnsClientFactory
-// based on the client option given in config.client.
-func (ns *nameserver) setDnsClientFactory(client string) {
-	switch client {
-	case "udp":
-		ns.dnsClientFactory = ns.defaultDnsClientFactory
-	case "tcp":
-		ns.dnsClientFactory = ns.defaultDnsClientFactory
-	case "dot":
-		ns.dnsClientFactory = ns.dotClientFactory
-	case "doq":
-		ns.dnsClientFactory = ns.doqClientFactory
-	default:
-		panic("Only the following clients are supported: udp, tcp, dot, and doq")
+	// defaults to UDP
+	timeout := GlobalConfig.udpTimeout
+	if protocol == "tcp" {
+		timeout = GlobalConfig.tcpTimeout
 	}
+	return &clients.ClassicClient{Port: "53", Client: &dns.Client{Net: protocol, Timeout: timeout}}
 }
 
 // newNameserver creates a new nameserver and sets the correct dnsClientFactory.
 // Note: there are probably cleaner ways of doing this.
-func newNameserver(hostname, addr, client string) *nameserver {
+func newNameserver(hostname, addr string) *nameserver {
 	ns := nameserver{
 		hostname: hostname,
 		addr:     addr,
 	}
-	ns.setDnsClientFactory(client)
 	return &ns
 }
 

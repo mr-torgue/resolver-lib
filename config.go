@@ -26,6 +26,9 @@ const (
 	DefaultTimeoutTCP = 1000 * time.Millisecond
 	DefaultTimeoutDOQ = 1500 * time.Millisecond
 	DefaultTimeoutDOT = 1500 * time.Millisecond
+	DefaultDNSPort    = 53
+	DefaultDoQPort    = 853
+	DefaultDoTPort    = 853
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
@@ -113,7 +116,9 @@ type Config struct {
 	tcpTimeout time.Duration
 	doqTimeout time.Duration
 	dotTimeout time.Duration
-
+	dnsPort    int
+	doqPort    int
+	dotPort    int
 	// TLS settings
 	tlsCache           tls.ClientSessionCache
 	pqcMode            bool // if enabled we only use PQC-safe primitives
@@ -199,6 +204,12 @@ func WithTLSVerification(verify bool) Option {
 		c.insecureSkipVerify = !verify
 	}
 }
+
+//func WithTLSCache(int capacity) Option {
+//	return func(c *Config) {
+//		c.insecureSkipVerify = !verify
+//	}
+//}
 
 // WithTimeouts sets the timeouts for connections.
 func WithTimeouts(udp, tcp, tls, quic time.Duration) Option {

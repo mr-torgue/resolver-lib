@@ -148,11 +148,11 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR) *nameserverPool {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), GlobalConfig.client))
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String()))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), GlobalConfig.client))
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String()))
 		}
 
 	}
@@ -192,11 +192,11 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), GlobalConfig.client))
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String()))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), GlobalConfig.client))
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String()))
 		}
 	}
 
