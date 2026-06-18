@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"crypto/tls"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,9 +27,9 @@ const (
 	DefaultTimeoutTCP = 1000 * time.Millisecond
 	DefaultTimeoutDOQ = 1500 * time.Millisecond
 	DefaultTimeoutDOT = 1500 * time.Millisecond
-	DefaultDNSPort    = 53
-	DefaultDoQPort    = 853
-	DefaultDoTPort    = 853
+	DefaultDNSPort    = "53"
+	DefaultDoQPort    = "853"
+	DefaultDoTPort    = "853"
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
@@ -116,9 +117,9 @@ type Config struct {
 	tcpTimeout time.Duration
 	doqTimeout time.Duration
 	dotTimeout time.Duration
-	dnsPort    int
-	doqPort    int
-	dotPort    int
+	dnsPort    string
+	doqPort    string
+	dotPort    string
 	// TLS settings
 	tlsCache           tls.ClientSessionCache
 	pqcMode            bool // if enabled we only use PQC-safe primitives
@@ -227,21 +228,21 @@ func WithPQCMode(pqcMode bool) Option {
 // WithCustomDNSPort changes the default port for UDP/TCP.
 func WithCustomDNSPort(dnsPort int) Option {
 	return func(c *Config) {
-		c.dnsPort = dnsPort
+		c.dnsPort = strconv.Itoa(dnsPort)
 	}
 }
 
 // WithCustomDoQPort changes the default port for DoQ.
 func WithCustomDoQPort(doqPort int) Option {
 	return func(c *Config) {
-		c.doqPort = doqPort
+		c.doqPort = strconv.Itoa(doqPort)
 	}
 }
 
 // WithCustomDoTPort changes the default port for DoT.
 func WithCustomDoTPort(dotPort int) Option {
 	return func(c *Config) {
-		c.dotPort = dotPort
+		c.dotPort = strconv.Itoa(dotPort)
 	}
 }
 

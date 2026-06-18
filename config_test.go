@@ -14,9 +14,6 @@ func TestSetConfig(t *testing.T) {
 		rootanchor         string
 		client             string
 		protocols          []string
-		dnsPort            int
-		doqPort            int
-		dotPort            int
 		insecureSkipVerify bool
 		pqcMode            bool
 		fallback           bool
@@ -149,9 +146,9 @@ func TestSetConfig(t *testing.T) {
 
 	// test custom ports
 	SetConfig(ConfigBuilder(WithCustomDNSPort(1234), WithCustomDoQPort(8853), WithCustomDoTPort(153)))
-	assert.Equal(t, 1234, GlobalConfig.dnsPort)
-	assert.Equal(t, 8853, GlobalConfig.doqPort)
-	assert.Equal(t, 153, GlobalConfig.dotPort)
+	assert.Equal(t, "1234", GlobalConfig.dnsPort)
+	assert.Equal(t, "8853", GlobalConfig.doqPort)
+	assert.Equal(t, "153", GlobalConfig.dotPort)
 
 	// test pqc mode
 	SetConfig(ConfigBuilder(WithPQCMode(true)))

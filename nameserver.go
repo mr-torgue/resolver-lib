@@ -35,6 +35,7 @@ type nameserver struct {
 	protocolRatio       float32
 }
 
+// Todo: use same tlsconfig for doq and dot to reuse code.
 func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	if protocol == "doq" {
 		// set up client
@@ -42,18 +43,48 @@ func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 			tlsconf := &tls.Config{
 				NextProtos:         []string{"doq"},
 				ServerName:         dns.Fqdn(n.hostname),
+				MinVersion:         tls.VersionTLS13,
 				InsecureSkipVerify: GlobalConfig.insecureSkipVerify,
+				ClientSessionCache: GlobalConfig.tlsCache,
 			}
-			n.quicClient = &clients.DOQClient{TLSConfig: tlsconf, Port: "853", Timeout: GlobalConfig.doqTimeout}
+			if GlobalConfig.pqcMode {
+				tlsconf.CurvePreferences = []tls.CurveID{
+					tls.X25519MLKEM768,
+					tls.SecP256r1MLKEM768,
+				}
+			} else {
+				tlsconf.CurvePreferences = []tls.CurveID{
+					tls.X25519MLKEM768,
+					tls.SecP256r1MLKEM768,
+					tls.X25519,
+					tls.CurveP256,
+				}
+			}
+			n.quicClient = &clients.DOQClient{TLSConfig: tlsconf, Port: GlobalConfig.doqPort, Timeout: GlobalConfig.doqTimeout}
 		}
 		return n.quicClient
 	} else if protocol == "dot" {
 		if n.tlsClient == nil {
 			tlsconf := &tls.Config{
 				ServerName:         dns.Fqdn(n.hostname),
+				MinVersion:         tls.VersionTLS13,
 				InsecureSkipVerify: GlobalConfig.insecureSkipVerify,
+				ClientSessionCache: GlobalConfig.tlsCache,
 			}
-			n.tlsClient = &clients.ClassicClient{Port: "853", Client: &dns.Client{
+			if GlobalConfig.pqcMode {
+				tlsconf.CurvePreferences = []tls.CurveID{
+					tls.X25519MLKEM768,
+					tls.SecP256r1MLKEM768,
+				}
+			} else {
+				tlsconf.CurvePreferences = []tls.CurveID{
+					tls.X25519MLKEM768,
+					tls.SecP256r1MLKEM768,
+					tls.X25519,
+					tls.CurveP256,
+				}
+			}
+			n.tlsClient = &clients.ClassicClient{Port: GlobalConfig.dotPort, Client: &dns.Client{
 				Net:       "tcp-tls",
 				Timeout:   GlobalConfig.dotTimeout,
 				TLSConfig: tlsconf,
@@ -66,7 +97,7 @@ func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	if protocol == "tcp" {
 		timeout = GlobalConfig.tcpTimeout
 	}
-	return &clients.ClassicClient{Port: "53", Client: &dns.Client{Net: protocol, Timeout: timeout}}
+	return &clients.ClassicClient{Port: GlobalConfig.dnsPort, Client: &dns.Client{Net: protocol, Timeout: timeout}}
 }
 
 // newNameserver creates a new nameserver and sets the correct dnsClientFactory.

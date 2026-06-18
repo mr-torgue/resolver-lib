@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -525,20 +526,135 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for receiver constructor.
-		hostname string
-		addr     string
+		hostname           string
+		addr               string
+		dnsPort            string
+		doqPort            string
+		dotPort            string
+		pqcMode            bool
+		insecureSkipVerify bool
 		// Named input parameters for target function.
-		protocol string
-		want     dnsClient
+		protocol       string
+		expectedClient string
 	}{
-		// TODO: Add test cases.
+		{
+			name:               "default settings",
+			hostname:           "example.com",
+			addr:               "1.2.3.4",
+			dnsPort:            "53",
+			doqPort:            "53",
+			dotPort:            "53",
+			pqcMode:            false,
+			insecureSkipVerify: false,
+			protocol:           "udp",
+			expectedClient:     "*clients.ClassicClient",
+		},
+		{
+			name:               "default settings",
+			hostname:           "example.com",
+			addr:               "1.2.3.4",
+			dnsPort:            "53",
+			doqPort:            "53",
+			dotPort:            "53",
+			pqcMode:            false,
+			insecureSkipVerify: false,
+			protocol:           "tcp",
+			expectedClient:     "*clients.ClassicClient",
+		},
+		{
+			name:               "default settings",
+			hostname:           "example.com",
+			addr:               "1.2.3.4",
+			dnsPort:            "53",
+			doqPort:            "53",
+			dotPort:            "53",
+			pqcMode:            false,
+			insecureSkipVerify: false,
+			protocol:           "dot",
+			expectedClient:     "*clients.ClassicClient",
+		},
+		{
+			name:               "default settings",
+			hostname:           "example.com",
+			dnsPort:            "53",
+			doqPort:            "53",
+			dotPort:            "53",
+			pqcMode:            false,
+			insecureSkipVerify: false,
+			addr:               "1.2.3.4",
+			protocol:           "doq",
+			expectedClient:     "*clients.DOQClient",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// set globalconfig
+			GlobalConfig.dnsPort = tt.dnsPort
+			GlobalConfig.doqPort = tt.doqPort
+			GlobalConfig.dotPort = tt.dotPort
+			GlobalConfig.pqcMode = tt.pqcMode
+			GlobalConfig.insecureSkipVerify = tt.insecureSkipVerify
+			assert.NotNil(t, GlobalConfig.tlsCache) // just in case
+
 			n := newNameserver(tt.hostname, tt.addr)
 			got := n.defaultDnsClientFactory(tt.protocol)
-			assert.Equal(t, got, tt.want) // check if right client is returned
-			// check tls settings
+			gotType := fmt.Sprintf("%T", got)
+			assert.Equal(t, tt.expectedClient, gotType)
+			if tt.protocol == "doq" {
+				assert.NotNil(t, n.quicClient)
+				assert.Equal(t, []string{"doq"}, n.quicClient.TLSConfig.NextProtos)
+				assert.Equal(t, dns.Fqdn(n.hostname), n.quicClient.TLSConfig.ServerName)
+				assert.Equal(t, uint16(tls.VersionTLS13), n.quicClient.TLSConfig.MinVersion)
+				assert.Equal(t, tt.insecureSkipVerify, n.quicClient.TLSConfig.InsecureSkipVerify)
+				assert.NotNil(t, n.quicClient.TLSConfig.ClientSessionCache)
+				client := got.(*clients.DOQClient)
+				assert.Equal(t, tt.doqPort, client.Port)
+
+				// check the curves
+				if tt.pqcMode {
+					assert.Equal(t, []tls.CurveID{
+						tls.X25519MLKEM768,
+						tls.SecP256r1MLKEM768,
+					}, n.quicClient.TLSConfig.CurvePreferences)
+				} else {
+					assert.Equal(t, []tls.CurveID{
+						tls.X25519MLKEM768,
+						tls.SecP256r1MLKEM768,
+						tls.X25519,
+						tls.CurveP256,
+					}, n.quicClient.TLSConfig.CurvePreferences)
+				}
+
+			} else if tt.protocol == "dot" {
+				assert.NotNil(t, n.tlsClient)
+				assert.Equal(t, dns.Fqdn(n.hostname), n.tlsClient.Client.TLSConfig.ServerName)
+				assert.Equal(t, uint16(tls.VersionTLS13), n.tlsClient.Client.TLSConfig.MinVersion)
+				assert.Equal(t, tt.insecureSkipVerify, n.tlsClient.Client.TLSConfig.InsecureSkipVerify)
+				assert.NotNil(t, n.tlsClient.Client.TLSConfig.ClientSessionCache)
+				client := got.(*clients.ClassicClient)
+				assert.Equal(t, tt.dotPort, client.Port)
+
+				// check the curves
+				if tt.pqcMode {
+					assert.Equal(t, []tls.CurveID{
+						tls.X25519MLKEM768,
+						tls.SecP256r1MLKEM768,
+					}, n.tlsClient.Client.TLSConfig.CurvePreferences)
+				} else {
+					assert.Equal(t, []tls.CurveID{
+						tls.X25519MLKEM768,
+						tls.SecP256r1MLKEM768,
+						tls.X25519,
+						tls.CurveP256,
+					}, n.tlsClient.Client.TLSConfig.CurvePreferences)
+				}
+
+			} else {
+				client := got.(*clients.ClassicClient)
+				assert.Equal(t, tt.dnsPort, client.Port)
+			}
 		})
 	}
+
+	SetConfig(&DefaultConfig) // reset config
 }
