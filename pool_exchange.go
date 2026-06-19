@@ -32,7 +32,9 @@ func (pool *nameserverPool) exchange(ctx context.Context, m *dns.Msg) *Response 
 		}
 	}
 
-	if response.IsEmpty() || response.HasError() || response.truncated() {
+	// removed  || response.truncated()  because it gave issues.
+	// Not sure if this is correct.
+	if response.IsEmpty() || response.HasError() {
 		// If there was an issue, we give it one more try.
 		// If we have more than one nameserver, this will try a different one.
 		if hasIPv4 {

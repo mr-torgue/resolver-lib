@@ -986,6 +986,23 @@ func TestResolver_FinaliseResponse_Opt(t *testing.T) {
 	assert.True(t, optSeen)
 }
 
+func TestResolver_Exchange_Fallback(t *testing.T) {
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("cisco.com.", dns.TypeTXT)
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	assert.True(t, response.Msg.Truncated)
+
+}
+
+// TestResolver_Exchange_Real resolves real domains.
+// Bit more error prone, so if it fails, it might be because of changing DNS info.
+func TestResolver_Exchange_Real(t *testing.T) {
+	// TODO
+}
+
 func BenchmarkResolver_Exchange(b *testing.B) {
 	resolver := NewResolver(&Config{})
 	msg := new(dns.Msg)
