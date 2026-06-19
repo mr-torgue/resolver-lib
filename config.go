@@ -23,13 +23,14 @@ const (
 	DefaultRemoveAuthoritySectionForPositiveAnswers  = true
 	DefaultRemoveAdditionalSectionForPositiveAnswers = true
 
-	DefaultTimeoutUDP = 400 * time.Millisecond
-	DefaultTimeoutTCP = 1000 * time.Millisecond
-	DefaultTimeoutDOQ = 1500 * time.Millisecond
-	DefaultTimeoutDOT = 1500 * time.Millisecond
-	DefaultDNSPort    = "53"
-	DefaultDoQPort    = "853"
-	DefaultDoTPort    = "853"
+	DefaultUDPSize    uint16 = 8192
+	DefaultTimeoutUDP        = 400 * time.Millisecond
+	DefaultTimeoutTCP        = 1000 * time.Millisecond
+	DefaultTimeoutDOQ        = 1500 * time.Millisecond
+	DefaultTimeoutDOT        = 1500 * time.Millisecond
+	DefaultDNSPort           = "53"
+	DefaultDoQPort           = "853"
+	DefaultDoTPort           = "853"
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
@@ -112,6 +113,7 @@ type Config struct {
 	rootZoneFile   string
 	rootAnchorFile string
 	protocols      []string // specifies the clients in order (example: [doq, udp, tcp])
+	udpsize        uint16   // we call this udpsize but it is actually the msg size
 	// timeout for connections, we need them individually because of fallbacks
 	udpTimeout time.Duration
 	tcpTimeout time.Duration
@@ -131,6 +133,7 @@ var DefaultConfig = Config{
 	rootZoneFile:       DefaultRootzone,
 	rootAnchorFile:     DefaultRootanchors,
 	protocols:          []string{"udp", "tcp"},
+	udpsize:            DefaultUDPSize,
 	udpTimeout:         DefaultTimeoutUDP,
 	tcpTimeout:         DefaultTimeoutTCP,
 	doqTimeout:         DefaultTimeoutDOQ,
@@ -226,23 +229,29 @@ func WithPQCMode(pqcMode bool) Option {
 }
 
 // WithCustomDNSPort changes the default port for UDP/TCP.
-func WithCustomDNSPort(dnsPort int) Option {
+func WithDNSPort(dnsPort int) Option {
 	return func(c *Config) {
 		c.dnsPort = strconv.Itoa(dnsPort)
 	}
 }
 
 // WithCustomDoQPort changes the default port for DoQ.
-func WithCustomDoQPort(doqPort int) Option {
+func WithDoQPort(doqPort int) Option {
 	return func(c *Config) {
 		c.doqPort = strconv.Itoa(doqPort)
 	}
 }
 
 // WithCustomDoTPort changes the default port for DoT.
-func WithCustomDoTPort(dotPort int) Option {
+func WithDoTPort(dotPort int) Option {
 	return func(c *Config) {
 		c.dotPort = strconv.Itoa(dotPort)
+	}
+}
+
+func WithUDPSize(udpsize uint16) Option {
+	return func(c *Config) {
+		c.udpsize = udpsize
 	}
 }
 

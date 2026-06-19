@@ -3,8 +3,9 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"github.com/mr-torgue/dns"
 	"strings"
+
+	"github.com/mr-torgue/dns"
 )
 
 func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error {
@@ -32,7 +33,7 @@ func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger)
 		cnameQMsg.SetQuestion(target, qmsg.Question[0].Qtype)
 
 		if isSetDO(qmsg) {
-			cnameQMsg.SetEdns0(4096, true)
+			cnameQMsg.SetEdns0(GlobalConfig.udpsize, true)
 		}
 
 		cnameRMsg := exchanger.exchange(ctx, cnameQMsg)

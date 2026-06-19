@@ -144,7 +144,7 @@ func (z *zoneImpl) dnskeys(ctx context.Context) ([]dns.RR, error) {
 
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(z.zoneName), dns.TypeDNSKEY)
-	msg.SetEdns0(4096, true)
+	msg.SetEdns0(GlobalConfig.udpsize, true)
 	msg.RecursionDesired = false
 	response := z.exchange(ctx, msg)
 	if response.HasError() {

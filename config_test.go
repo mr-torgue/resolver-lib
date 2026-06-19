@@ -108,6 +108,7 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, []string{"udp", "tcp"}, GlobalConfig.protocols)
 	assert.Equal(t, DefaultRootanchors, GlobalConfig.rootAnchorFile)
 	assert.Equal(t, DefaultRootzone, GlobalConfig.rootZoneFile)
+	assert.Equal(t, DefaultUDPSize, GlobalConfig.udpsize)
 	assert.Equal(t, DefaultTimeoutUDP, GlobalConfig.udpTimeout)
 	assert.Equal(t, DefaultTimeoutTCP, GlobalConfig.tcpTimeout)
 	assert.Equal(t, DefaultTimeoutDOQ, GlobalConfig.doqTimeout)
@@ -145,7 +146,7 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, time.Duration(100), GlobalConfig.doqTimeout)
 
 	// test custom ports
-	SetConfig(ConfigBuilder(WithCustomDNSPort(1234), WithCustomDoQPort(8853), WithCustomDoTPort(153)))
+	SetConfig(ConfigBuilder(WithDNSPort(1234), WithDoQPort(8853), WithDoTPort(153)))
 	assert.Equal(t, "1234", GlobalConfig.dnsPort)
 	assert.Equal(t, "8853", GlobalConfig.doqPort)
 	assert.Equal(t, "153", GlobalConfig.dotPort)
@@ -154,10 +155,15 @@ func TestSetConfig(t *testing.T) {
 	SetConfig(ConfigBuilder(WithPQCMode(true)))
 	assert.True(t, GlobalConfig.pqcMode)
 
+	// test udpsize
+	SetConfig(ConfigBuilder(WithUDPSize(12345)))
+	assert.Equal(t, uint16(12345), GlobalConfig.udpsize)
+
 	SetConfig(&DefaultConfig) // reset config
 	assert.Equal(t, []string{"udp", "tcp"}, GlobalConfig.protocols)
 	assert.Equal(t, DefaultRootanchors, GlobalConfig.rootAnchorFile)
 	assert.Equal(t, DefaultRootzone, GlobalConfig.rootZoneFile)
+	assert.Equal(t, DefaultUDPSize, GlobalConfig.udpsize)
 	assert.Equal(t, DefaultTimeoutUDP, GlobalConfig.udpTimeout)
 	assert.Equal(t, DefaultTimeoutTCP, GlobalConfig.tcpTimeout)
 	assert.Equal(t, DefaultTimeoutDOQ, GlobalConfig.doqTimeout)
