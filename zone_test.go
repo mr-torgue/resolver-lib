@@ -62,6 +62,7 @@ func TestZone_Exchange_WithPool(t *testing.T) {
 		return c.Value(ctxZoneName).(string) == "example.com."
 	})
 	mockPool.AssertCalled(t, "exchange", ctxMatcher, msg)
+
 }
 
 func TestZone_Clone(t *testing.T) {

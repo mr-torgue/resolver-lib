@@ -997,6 +997,44 @@ func TestResolver_Exchange_Fallback(t *testing.T) {
 
 }
 
+func TestResolver_Cache(t *testing.T) {
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("folmer.info.", dns.TypeA)
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
+	require.NotNil(t, GlobalConfig.cache)
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	assert.Equal(t, 1, len(response.Msg.Answer))
+	assert.Contains(t, response.Msg.Answer[0].String(), "65.109.0.142")
+
+	// check cache
+	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
+	_, err := GlobalConfig.cache.Get("", qmsg.Question[0])
+	assert.Nil(t, err)
+
+	// test with DNSSEC domain
+	qmsg = &dns.Msg{}
+	qmsg.SetQuestion("miek.nl.", dns.TypeA)
+	qmsg.SetEdns0(1232, true)
+	response = resolver.Exchange(context.Background(), qmsg)
+	require.Equal(t, 3, len(response.Msg.Answer))
+
+	answer := response.Msg.Answer[0].String() + response.Msg.Answer[1].String() + response.Msg.Answer[2].String()
+	assert.Contains(t, answer, "45.138.52.215")
+	assert.Contains(t, answer, "X0QXDYdVsTdjKUmn0VMXz93yv02v44LhJhcgThXvtuv/Zv/4kXMxpS9D")
+	assert.Contains(t, answer, "cVgb8wqqOhWwLdL//ohzrTh3gr1ILXrYwMhO859y2UwteFVvcSK+AQNz")
+
+	// check cache
+	time.Sleep(500 * time.Millisecond)
+	_, err = GlobalConfig.cache.Get("", qmsg.Question[0])
+	assert.Nil(t, err)
+
+	// reset config
+	SetConfig(ConfigBuilder())
+
+}
+
 // TestResolver_Exchange_Real resolves real domains.
 // Bit more error prone, so if it fails, it might be because of changing DNS info.
 func TestResolver_Exchange_Real(t *testing.T) {

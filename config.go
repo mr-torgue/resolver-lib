@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
@@ -72,7 +73,7 @@ var (
 //---
 
 // Cache Default (disabled) cache function.
-var Cache CacheInterface = nil
+//var Cache CacheInterface = nil
 
 //---
 
@@ -126,6 +127,8 @@ type Config struct {
 	tlsCache           tls.ClientSessionCache
 	pqcMode            bool // if enabled we only use PQC-safe primitives
 	insecureSkipVerify bool // indicates if we check tls or not
+	// cache
+	cache CacheInterface
 }
 
 // DefaultConfig is a working default GlobalConfig.
@@ -144,6 +147,7 @@ var DefaultConfig = Config{
 	tlsCache:           tls.NewLRUClientSessionCache(DefaultCacheSize),
 	pqcMode:            false,
 	insecureSkipVerify: false,
+	cache:              nil,
 }
 
 type Option func(*Config)
@@ -262,5 +266,11 @@ func WithTimeouts(udp, tcp, tls, quic time.Duration) Option {
 		c.tcpTimeout = tcp
 		c.dotTimeout = tls
 		c.doqTimeout = quic
+	}
+}
+
+func WithCache(size int) Option {
+	return func(c *Config) {
+		c.cache = cache.NewCache(cache.WithCapacity(size))
 	}
 }

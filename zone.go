@@ -63,15 +63,20 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 
 	z.calls.Add(1)
 
-	if Cache != nil {
-		if msg, err := Cache.Get(z.zoneName, m.Question[0]); err != nil {
+	if GlobalConfig.cache != nil {
+		if msg, err := GlobalConfig.cache.Get(z.zoneName, m.Question[0]); err != nil {
 			Warn(fmt.Errorf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err).Error())
 		} else if msg != nil {
-			trace, _ := ctx.Value(CtxTrace).(*Trace)
+			shortId := "unknown"
+			iteration := uint32(0)
+			if trace, _ := ctx.Value(CtxTrace).(*Trace); trace != nil {
+				shortId = trace.ShortID()
+				iteration = trace.Iteration()
+			}
 			Query(fmt.Sprintf(
 				"%s-%d: response for [%s] %s in zone [%s] found in cache",
-				trace.ShortID(),
-				trace.Iteration(),
+				shortId,
+				iteration,
 				m.Question[0].Name,
 				TypeToString(m.Question[0].Qtype),
 				z.zoneName,
@@ -91,12 +96,12 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 
 	//---
 
-	if Cache != nil && !response.IsEmpty() && !response.HasError() {
+	if GlobalConfig.cache != nil && !response.IsEmpty() && !response.HasError() {
 		go func(zone string, question dns.Question, msg *dns.Msg) {
 			// We never cache OPT records.
 			msg.Extra = removeRecordsOfType(msg.Extra, dns.TypeOPT)
 
-			if err := Cache.Update(zone, question, msg); err != nil {
+			if err := GlobalConfig.cache.Update(zone, question, msg); err != nil {
 				Warn(fmt.Errorf("error trying to perform a cache update for zone [%s]: %w", z.zoneName, err).Error())
 			}
 		}(z.zoneName, m.Question[0], response.Msg.Copy())
