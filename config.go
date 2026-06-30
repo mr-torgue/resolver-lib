@@ -35,7 +35,7 @@ const (
 	DefaultTimeoutDOT        = 1500 * time.Millisecond
 	DefaultDNSPort           = "53"
 	DefaultDoQPort           = "853"
-	DefaultDoTPort           = "853"
+	DefaultDoTPort           = "8853"
 
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
@@ -105,7 +105,7 @@ func init() {
 	}
 }
 
-// The Config struct (c) contains the global configuration for the resolver.
+// The Config struct (c) contains the configuration for the resolver.
 // It does only do some basic checking.
 // At some point, we should move the complete configuration to this struct.
 
@@ -130,7 +130,7 @@ type Config struct {
 	cache CacheInterface
 }
 
-// DefaultConfig is a working default GlobalConfig.
+// DefaultConfig is a working default configuration.
 var DefaultConfig = Config{
 	rootZoneFile:       DefaultRootzone,
 	rootAnchorFile:     DefaultRootanchors,

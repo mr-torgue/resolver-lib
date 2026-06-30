@@ -126,8 +126,7 @@ func (pool *nameserverPool) status() NameserverPoolStatus {
 }
 
 func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *nameserverPool {
-	pool := &nameserverPool{}
-	pool.config = config
+	pool := &nameserverPool{config: config}
 
 	var ttl = MaxAllowedTTL
 	pool.hostsWithoutAddresses = make([]string, 0, len(nameservers))

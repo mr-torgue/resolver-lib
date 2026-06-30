@@ -80,8 +80,7 @@ func (resolver *Resolver) CountZones() int {
 func buildRootServerPool(rootZone string, config *Config) (*nameserverPool, error) {
 	zp := dns.NewZoneParser(strings.NewReader(rootZone), ".", "local")
 
-	pool := &nameserverPool{hostsWithoutAddresses: make([]string, 0)}
-	pool.config = config
+	pool := &nameserverPool{hostsWithoutAddresses: make([]string, 0), config: config}
 
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		switch rr := rr.(type) {

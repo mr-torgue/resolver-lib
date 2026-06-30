@@ -66,9 +66,7 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 
 	z.calls.Add(1)
 
-	//if GlobalConfig.cache != nil {
 	if z.config.cache != nil {
-		//if msg, err := GlobalConfig.cache.Get(z.zoneName, m.Question[0]); err != nil {
 		if msg, err := z.config.cache.Get(z.zoneName, m.Question[0]); err != nil {
 			Warn(fmt.Errorf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err).Error())
 		} else if msg != nil {
@@ -101,13 +99,11 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 
 	//---
 
-	//if GlobalConfig.cache != nil && !response.IsEmpty() && !response.HasError() {
 	if z.config.cache != nil && !response.IsEmpty() && !response.HasError() {
 		go func(zone string, question dns.Question, msg *dns.Msg) {
 			// We never cache OPT records.
 			msg.Extra = removeRecordsOfType(msg.Extra, dns.TypeOPT)
 
-			//if err := GlobalConfig.cache.Update(zone, question, msg); err != nil {
 			if err := z.config.cache.Update(zone, question, msg); err != nil {
 				Warn(fmt.Errorf("error trying to perform a cache update for zone [%s]: %w", z.zoneName, err).Error())
 			}
@@ -156,7 +152,6 @@ func (z *zoneImpl) dnskeys(ctx context.Context) ([]dns.RR, error) {
 
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn(z.zoneName), dns.TypeDNSKEY)
-	//msg.SetEdns0(GlobalConfig.udpsize, true)
 	msg.SetEdns0(z.config.udpsize, true)
 	msg.RecursionDesired = false
 	response := z.exchange(ctx, msg)
