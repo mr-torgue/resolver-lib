@@ -1020,10 +1020,11 @@ func TestResolver_Cache(t *testing.T) {
 	response = resolver.Exchange(context.Background(), qmsg)
 	require.Equal(t, 3, len(response.Msg.Answer))
 
+	// error prone, verfiy expected outcome with dig miek.nl +dnssec
 	answer := response.Msg.Answer[0].String() + response.Msg.Answer[1].String() + response.Msg.Answer[2].String()
 	assert.Contains(t, answer, "45.138.52.215")
-	assert.Contains(t, answer, "X0QXDYdVsTdjKUmn0VMXz93yv02v44LhJhcgThXvtuv/Zv/4kXMxpS9D")
-	assert.Contains(t, answer, "cVgb8wqqOhWwLdL//ohzrTh3gr1ILXrYwMhO859y2UwteFVvcSK+AQNz")
+	assert.Contains(t, answer, "VTrB4LMPiUAL2zPnLAfDO3sqgrjN/pwIsVdDjazGxpexzW6qH5XpM0cc")
+	assert.Contains(t, answer, "ZzydZLEriRRchJ/0XBcHkl1G7NH7WUvfjet7561cFNy3LxpURlF1jtj6")
 
 	// check cache
 	time.Sleep(500 * time.Millisecond)

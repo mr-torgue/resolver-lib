@@ -6,9 +6,14 @@ import (
 	"sync"
 	"time"
 
+	// the unsafe package is required for the //go:linkname directive.
+	"unsafe"
+
 	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 )
+
+var _ = unsafe.Pointer(nil) // this line ensures the unsafe package is not removed.
 
 const (
 	DefaultMaxAllowedTTL = uint32(60 * 60 * 48) // 48 Hours
@@ -273,4 +278,22 @@ func WithCache(size int) Option {
 	return func(c *Config) {
 		c.cache = cache.NewCache(cache.WithCapacity(size))
 	}
+}
+
+// BAD CODE WARNING!
+// linking not recommmended but it is the easiest way to enforce the use of AES256.
+// AES128 should be quantum-safe, but some people are squeamish about the 64 bits of security...
+
+//go:linkname defaultCipherSuitesTLS13
+var defaultCipherSuitesTLS13 = []uint16{
+	tls.TLS_AES_256_GCM_SHA384,
+	tls.TLS_AES_128_GCM_SHA256,
+	tls.TLS_CHACHA20_POLY1305_SHA256,
+}
+
+//go:linkname defaultCipherSuitesTLS13NoAES
+var defaultCipherSuitesTLS13NoAES = []uint16{
+	tls.TLS_CHACHA20_POLY1305_SHA256,
+	tls.TLS_AES_256_GCM_SHA384,
+	tls.TLS_AES_128_GCM_SHA256,
 }
