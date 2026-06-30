@@ -1040,11 +1040,52 @@ func TestResolver_Exchange_Real(t *testing.T) {
 	// TODO
 }
 
-func BenchmarkResolver_Exchange(b *testing.B) {
-	resolver := NewResolver(&Config{})
+// BenchmarkResolver_Exchange_UDP_1 benchmarks github.com.
+// It does not use cache, DNSSEC is enabled, but github.com does not support.
+func BenchmarkResolver_Exchange_UDP_1(b *testing.B) {
+	resolver := NewResolver(ConfigBuilder())
 	msg := new(dns.Msg)
 	msg.SetQuestion(dns.Fqdn("github.com"), dns.TypeA)
-	msg.SetEdns0(4096, false)
+	msg.SetEdns0(1232, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = resolver.Exchange(context.Background(), msg)
+	}
+}
+
+// BenchmarkResolver_Exchange_UDP_2 benchmarks cloudflare.com.
+// It does not use cache, DNSSEC is enabled, and cloudflare.com does support.
+func BenchmarkResolver_Exchange_UDP_2(b *testing.B) {
+	resolver := NewResolver(ConfigBuilder())
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn("cloudflare.com"), dns.TypeA)
+	msg.SetEdns0(1232, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = resolver.Exchange(context.Background(), msg)
+	}
+}
+
+// BenchmarkResolver_Exchange_UDP_3 benchmarks cloudflare.com.
+// It does use cache, DNSSEC is enabled, and cloudflare.com does support.
+func BenchmarkResolver_Exchange_UDP_3(b *testing.B) {
+	resolver := NewResolver(ConfigBuilder(WithCache(1000)))
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn("cloudflare.com"), dns.TypeA)
+	msg.SetEdns0(1232, false)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = resolver.Exchange(context.Background(), msg)
+	}
+}
+
+// BenchmarkResolver_Exchange_TCP_1 benchmarks github.com.
+// It does not use cache, DNSSEC is enabled, but github.com does not support.
+func BenchmarkResolver_Exchange_TCP_1(b *testing.B) {
+	resolver := NewResolver(ConfigBuilder(WithClient("tcp", false)))
+	msg := new(dns.Msg)
+	msg.SetQuestion(dns.Fqdn("github.com"), dns.TypeA)
+	msg.SetEdns0(1232, false)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = resolver.Exchange(context.Background(), msg)
