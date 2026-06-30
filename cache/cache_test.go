@@ -18,7 +18,7 @@ func cacheMsg(m *dns.Msg, tc test.Case) *dns.Msg {
 	m.Truncated = tc.Truncated
 	m.Answer = tc.Answer
 	m.Ns = tc.Ns
-	// m.Extra = tc.in.Extra don't copy Extra, because we don't care and fake EDNS0 DO with tc.Do.
+	m.Extra = tc.Extra //don't copy Extra, because we don't care and fake EDNS0 DO with tc.Do.
 	return m
 }
 
@@ -333,7 +333,7 @@ func TestCacheInsertion(t *testing.T) {
 			m := tc.in.Msg()
 			m = cacheMsg(m, tc.in)
 			c.UpdateWithTime("", m.Question[0], m, now)
-			resp, err := c.GetWithTime("", m.Question[0], now)
+			resp, err := c.GetWithTime("", m, now)
 			//require.Nil(t, err)
 			found := err == nil
 
@@ -354,6 +354,7 @@ func TestCacheInsertion(t *testing.T) {
 				//assert.Equal(t, tc.out.AuthenticatedData, resp.AuthenticatedData)
 				//assert.Equal(t, tc.out.RecursionAvailable, resp.RecursionAvailable)
 				//assert.Equal(t, tc.out.CheckingDisabled, resp.CheckingDisabled)
+				assert.True(t, resp.Response)
 
 				if err := test.Header(tc.out, resp); err != nil {
 					t.Logf("Cache %v", resp)

@@ -67,7 +67,7 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 	z.calls.Add(1)
 
 	if z.config.cache != nil {
-		if msg, err := z.config.cache.Get(z.zoneName, m.Question[0]); err != nil {
+		if msg, err := z.config.cache.Get(z.zoneName, m); err != nil {
 			Warn(fmt.Errorf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err).Error())
 		} else if msg != nil {
 			shortId := "unknown"

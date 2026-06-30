@@ -1012,7 +1012,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
-	_, err := resolver.config.cache.Get("", qmsg.Question[0])
+	_, err := resolver.config.cache.Get("", qmsg)
 	assert.Nil(t, err)
 
 	// test with DNSSEC domain
@@ -1030,7 +1030,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond)
-	_, err = resolver.config.cache.Get("", qmsg.Question[0])
+	_, err = resolver.config.cache.Get("", qmsg)
 	assert.Nil(t, err)
 }
 

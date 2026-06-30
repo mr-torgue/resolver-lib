@@ -12,6 +12,7 @@ import (
 type ValidationStatus int
 
 var (
+	ErrEmptyQuestion    = fmt.Errorf("Question is empty")
 	ErrCacheMiss        = fmt.Errorf("Cache entry not found")
 	ErrCacheExpired     = fmt.Errorf("Cache entry expired")
 	ErrCacheNoTruncated = fmt.Errorf("Cache does not cache truncated messages")
@@ -135,10 +136,14 @@ func (c *Cache) Update(zone string, question dns.Question, msg *dns.Msg) error {
 }
 
 // Get returns an item from cache.
-func (c *Cache) GetWithTime(zone string, question dns.Question, now time.Time) (*dns.Msg, error) {
+func (c *Cache) GetWithTime(zone string, qmsg *dns.Msg, now time.Time) (*dns.Msg, error) {
+	if qmsg == nil || len(qmsg.Question) == 0 {
+		return nil, ErrEmptyQuestion
+	}
 	// always return a message
 	msg := new(dns.Msg)
 	msg.Rcode = dns.RcodeServerFailure
+	question := qmsg.Question[0]
 
 	key := Key(question.Name, question.Qtype)
 
@@ -155,7 +160,14 @@ func (c *Cache) GetWithTime(zone string, question dns.Question, now time.Time) (
 	// Construct response message
 	msg.Answer = append(val.Records, val.Signatures...)
 	msg.Rcode = val.Rcode
-	msg.SetQuestion(question.Name, question.Qtype)
+	msg.SetReply(qmsg)
+
+	// set opt record if qmsg had one
+	edns0 := qmsg.IsEdns0()
+	if edns0 != nil {
+		msg.SetEdns0(edns0.UDPSize(), edns0.Do())
+	}
+
 	msg.Authoritative = true // according to tests: "Cache entries are always Authoritative"
 
 	// Set AD bit if Secure
@@ -166,8 +178,8 @@ func (c *Cache) GetWithTime(zone string, question dns.Question, now time.Time) (
 }
 
 // Get returns an item from cache.
-func (c *Cache) Get(zone string, question dns.Question) (*dns.Msg, error) {
-	return c.GetWithTime(zone, question, time.Now())
+func (c *Cache) Get(zone string, qmsg *dns.Msg) (*dns.Msg, error) {
+	return c.GetWithTime(zone, qmsg, time.Now())
 }
 
 // Len returns the cache length.
