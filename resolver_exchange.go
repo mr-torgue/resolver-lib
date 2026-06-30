@@ -87,7 +87,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 			// We never look directly at the first zone.
 			z := knownZones[i+1]
 			dsName := knownZones[i].name()
-			auth.addDelegationSignerLink(z, dsName)
+			auth.addDelegationSignerLink(z, dsName, resolver.config.udpsize)
 		}
 	}
 
@@ -211,7 +211,7 @@ func (resolver *Resolver) checkForMissingZones(ctx context.Context, d *domain, z
 			newZone := z.clone(missingDomain, z.name())
 
 			if auth != nil {
-				auth.addDelegationSignerLink(z, newZone.name())
+				auth.addDelegationSignerLink(z, newZone.name(), resolver.config.udpsize)
 			}
 
 			resolver.zones.add(newZone)
@@ -244,7 +244,7 @@ func (resolver *Resolver) processDelegation(ctx context.Context, z zone, rmsg *d
 		}
 	}
 
-	newZone, err := resolver.funcs.createZone(ctx, nextZoneName, z.name(), nameservers, rmsg.Extra, resolver.funcs.getExchanger())
+	newZone, err := resolver.funcs.createZone(ctx, nextZoneName, z.name(), nameservers, rmsg.Extra, resolver.funcs.getExchanger(), resolver.config)
 	if err != nil {
 		return nil, newResponseError(err)
 	}
@@ -317,7 +317,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 	// Follow any CNAME, if needed.
 	if qmsg.Question[0].Qtype != dns.TypeCNAME && recordsOfTypeExist(response.Msg.Answer, dns.TypeCNAME) {
 		// The results from this are added to `response.Msg`.
-		err := resolver.funcs.cname(ctx, qmsg, response, resolver.funcs.getExchanger())
+		err := resolver.funcs.cname(ctx, qmsg, response, resolver.funcs.getExchanger(), resolver.config.udpsize)
 		if err != nil {
 			return &Response{
 				Err: err,

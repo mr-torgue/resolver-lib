@@ -50,7 +50,7 @@ func (a *authenticator) close() {
 	})
 }
 
-func (a *authenticator) addDelegationSignerLink(z zone, qname string) {
+func (a *authenticator) addDelegationSignerLink(z zone, qname string, udpsize uint16) {
 	if a.finished.Load() {
 		return
 	}
@@ -62,7 +62,7 @@ func (a *authenticator) addDelegationSignerLink(z zone, qname string) {
 
 		dsMsg := new(dns.Msg)
 		dsMsg.SetQuestion(dns.Fqdn(qname), dns.TypeDS)
-		dsMsg.SetEdns0(GlobalConfig.udpsize, true)
+		dsMsg.SetEdns0(udpsize, true)
 		dsMsg.RecursionDesired = false
 		response := z.exchange(a.ctx, dsMsg)
 		if !response.IsEmpty() && !response.HasError() {

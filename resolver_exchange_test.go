@@ -53,8 +53,9 @@ func getTestResolverWithRoot() *Resolver {
 	}
 
 	r := &Resolver{
-		zones: mzs,
-		funcs: resolverFunctions{},
+		zones:  mzs,
+		funcs:  resolverFunctions{},
+		config: ConfigBuilder(),
 	}
 
 	return r
@@ -85,7 +86,8 @@ func getTestResolverWithExample() (*Resolver, *mockZone, *mockZone, *mockZone, *
 	}
 
 	resolver := &Resolver{
-		zones: mzs,
+		zones:  mzs,
+		config: ConfigBuilder(),
 	}
 
 	resolver.funcs = resolverFunctions{
@@ -758,7 +760,7 @@ func TestResolver_ProcessDelegation_ErrorFromCreateZone(t *testing.T) {
 	}
 
 	createZoneCalled := 0
-	resolver.funcs.createZone = func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger) (zone, error) {
+	resolver.funcs.createZone = func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {
 		createZoneCalled++
 		return nil, errors.New("test error")
 	}
@@ -797,7 +799,7 @@ func TestResolver_ProcessDelegation_CreateZone(t *testing.T) {
 
 	var newZone *mockZone
 	createZoneCalled := 0
-	resolver.funcs.createZone = func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger) (zone, error) {
+	resolver.funcs.createZone = func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {
 		createZoneCalled++
 		newZone = getMockZone(name, parent)
 		return newZone, nil
@@ -853,7 +855,7 @@ func TestResolver_FinaliseResponse_CNameQuestion(t *testing.T) {
 	inputResponse := &Response{Msg: rmsg}
 
 	cnameCalled := 0
-	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error {
+	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error {
 		cnameCalled++
 		return nil
 	}
@@ -881,7 +883,7 @@ func TestResolver_FinaliseResponse_CNameAnswer(t *testing.T) {
 	inputResponse := &Response{Msg: rmsg}
 
 	cnameCalled := 0
-	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error {
+	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error {
 		cnameCalled++
 		return nil
 	}
@@ -911,7 +913,7 @@ func TestResolver_FinaliseResponse_CNameError(t *testing.T) {
 	ErrorTest := errors.New("test error")
 
 	cnameCalled := 0
-	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error {
+	resolver.funcs.cname = func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error {
 		cnameCalled++
 		return ErrorTest
 	}
@@ -1002,7 +1004,7 @@ func TestResolver_Cache(t *testing.T) {
 	qmsg.SetQuestion("folmer.info.", dns.TypeA)
 
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
-	require.NotNil(t, GlobalConfig.cache)
+	require.NotNil(t, resolver.config.cache)
 
 	response := resolver.Exchange(context.Background(), qmsg)
 	assert.Equal(t, 1, len(response.Msg.Answer))
@@ -1010,7 +1012,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
-	_, err := GlobalConfig.cache.Get("", qmsg.Question[0])
+	_, err := resolver.config.cache.Get("", qmsg.Question[0])
 	assert.Nil(t, err)
 
 	// test with DNSSEC domain
@@ -1023,17 +1025,13 @@ func TestResolver_Cache(t *testing.T) {
 	// error prone, verfiy expected outcome with dig miek.nl +dnssec
 	answer := response.Msg.Answer[0].String() + response.Msg.Answer[1].String() + response.Msg.Answer[2].String()
 	assert.Contains(t, answer, "45.138.52.215")
-	assert.Contains(t, answer, "VTrB4LMPiUAL2zPnLAfDO3sqgrjN/pwIsVdDjazGxpexzW6qH5XpM0cc")
-	assert.Contains(t, answer, "ZzydZLEriRRchJ/0XBcHkl1G7NH7WUvfjet7561cFNy3LxpURlF1jtj6")
+	assert.Contains(t, answer, "EIxiSDEBIswUBRZL3PGEsJwy8M04k92yuV2QGq1YD5+Sykm8rpxQI5FI")
+	assert.Contains(t, answer, "X4jFvj59dEtqzDM65dShpvzYU+mdrKgNDtagZp0iA6EAxMOYBAJ7GhJr")
 
 	// check cache
 	time.Sleep(500 * time.Millisecond)
-	_, err = GlobalConfig.cache.Get("", qmsg.Question[0])
+	_, err = resolver.config.cache.Get("", qmsg.Question[0])
 	assert.Nil(t, err)
-
-	// reset config
-	SetConfig(ConfigBuilder())
-
 }
 
 // TestResolver_Exchange_Real resolves real domains.

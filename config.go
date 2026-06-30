@@ -3,7 +3,6 @@ package resolver
 import (
 	"crypto/tls"
 	"strconv"
-	"sync"
 	"time"
 
 	// the unsafe package is required for the //go:linkname directive.
@@ -110,11 +109,6 @@ func init() {
 // It does only do some basic checking.
 // At some point, we should move the complete configuration to this struct.
 
-var (
-	GlobalConfig *Config = &DefaultConfig
-	mu           sync.Mutex
-)
-
 type Config struct {
 	rootZoneFile   string
 	rootAnchorFile string
@@ -156,14 +150,6 @@ var DefaultConfig = Config{
 }
 
 type Option func(*Config)
-
-// SetConfig sets the configuration.
-// Note
-func SetConfig(c *Config) {
-	mu.Lock()
-	defer mu.Unlock()
-	GlobalConfig = c
-}
 
 // ConfigBuilder builds a configuration based on the provided options.
 func ConfigBuilder(options ...Option) *Config {

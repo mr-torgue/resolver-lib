@@ -16,7 +16,7 @@ import (
 
 func TestZone_Exchange_NilPool(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 
 	// Prepare a DNS message
 	msg := new(dns.Msg)
@@ -32,7 +32,7 @@ func TestZone_Exchange_NilPool(t *testing.T) {
 
 func TestZone_Exchange_WithPool(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	z.pool = mockPool
 
@@ -67,7 +67,7 @@ func TestZone_Exchange_WithPool(t *testing.T) {
 
 func TestZone_Clone(t *testing.T) {
 	// Setup
-	originalZone := &zoneImpl{zoneName: "example.com."}
+	originalZone := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	originalZone.pool = mockPool
 
@@ -84,7 +84,7 @@ func TestZone_Clone(t *testing.T) {
 
 func TestZone_DNSKeys_CachedAndValid(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockRR := []dns.RR{&dns.DNSKEY{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeDNSKEY, Class: dns.ClassINET, Ttl: 300}}}
 	z.dnskeyRecords = mockRR
 	z.dnskeyExpiry = time.Now().Add(time.Hour) // Keys are still valid
@@ -100,7 +100,7 @@ func TestZone_DNSKeys_CachedAndValid(t *testing.T) {
 
 func TestZone_DNSKeys_Expired(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	z.pool = mockPool
 
@@ -128,7 +128,7 @@ func TestZone_DNSKeys_Expired(t *testing.T) {
 
 func TestZone_DNSKeys_NilResponse(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	z.pool = mockPool
 
@@ -145,7 +145,7 @@ func TestZone_DNSKeys_NilResponse(t *testing.T) {
 
 func TestZone_DNSKeys_ErrorResponse(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	z.pool = mockPool
 
@@ -169,7 +169,7 @@ func TestZone_DNSKeys_ErrorResponse(t *testing.T) {
 
 func TestZone_DNSKeys_EmptyAnswer(t *testing.T) {
 	// Setup
-	z := &zoneImpl{zoneName: "example.com."}
+	z := &zoneImpl{zoneName: "example.com.", config: ConfigBuilder()}
 	mockPool := new(MockExpiringExchanger)
 	z.pool = mockPool
 

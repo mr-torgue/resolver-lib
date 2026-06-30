@@ -34,6 +34,8 @@ type nameserverPool struct {
 	enriched sync.Once
 
 	expires atomic.Int64
+
+	config *Config // make sure that this config points to the same as resolver
 }
 
 func (pool *nameserverPool) hasIPv4() bool {
@@ -123,8 +125,9 @@ func (pool *nameserverPool) status() NameserverPoolStatus {
 	return PoolPrimed
 }
 
-func newNameserverPool(nameservers []*dns.NS, extra []dns.RR) *nameserverPool {
+func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *nameserverPool {
 	pool := &nameserverPool{}
+	pool.config = config
 
 	var ttl = MaxAllowedTTL
 	pool.hostsWithoutAddresses = make([]string, 0, len(nameservers))
@@ -148,11 +151,11 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR) *nameserverPool {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String()))
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), config))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String()))
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), config))
 		}
 
 	}
@@ -192,11 +195,11 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String()))
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), pool.config))
 		}
 
 		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String()))
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), pool.config))
 		}
 	}
 

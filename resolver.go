@@ -10,23 +10,23 @@ import (
 )
 
 type Resolver struct {
-	zones zoneStore
-	funcs resolverFunctions
+	zones  zoneStore
+	funcs  resolverFunctions
+	config *Config
 }
 
 // The core, top level, resolving functions. They're defined as variables to aid overriding them for testing.
 type resolverFunctions struct {
 	resolveLabel         func(ctx context.Context, d *domain, z zone, qmsg *dns.Msg, auth *authenticator) (zone, *Response)
 	checkForMissingZones func(ctx context.Context, d *domain, z zone, rmsg *dns.Msg, auth *authenticator) zone
-	createZone           func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger) (zone, error)
+	createZone           func(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error)
 	finaliseResponse     func(ctx context.Context, auth *authenticator, qmsg *dns.Msg, response *Response) *Response
 	processDelegation    func(ctx context.Context, z zone, rmsg *dns.Msg) (zone, *Response)
-	cname                func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error
+	cname                func(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error
 	getExchanger         func() exchanger
 }
 
 func NewResolver(config *Config) *Resolver {
-	SetConfig(config)
 	// load files
 	dnssec.LoadAnchors(config.rootAnchorFile)
 	rootZone, err := os.ReadFile(config.rootZoneFile)
@@ -34,7 +34,7 @@ func NewResolver(config *Config) *Resolver {
 		panic(err)
 	}
 	rootZoneStr := string(rootZone)
-	pool, err := buildRootServerPool(rootZoneStr)
+	pool, err := buildRootServerPool(rootZoneStr, config)
 	if err != nil {
 		// Everything is technically static at this point.
 		panic(err)
@@ -44,10 +44,12 @@ func NewResolver(config *Config) *Resolver {
 	z.add(&zoneImpl{
 		zoneName: ".",
 		pool:     pool,
+		config:   config,
 	})
 
 	resolver := &Resolver{
-		zones: z,
+		zones:  z,
+		config: config,
 	}
 
 	// When not testing, we point to the concrete instances of the functions.
@@ -75,17 +77,18 @@ func (resolver *Resolver) CountZones() int {
 
 //-----------------------------------------------------------------------------
 
-func buildRootServerPool(rootZone string) (*nameserverPool, error) {
+func buildRootServerPool(rootZone string, config *Config) (*nameserverPool, error) {
 	zp := dns.NewZoneParser(strings.NewReader(rootZone), ".", "local")
 
 	pool := &nameserverPool{hostsWithoutAddresses: make([]string, 0)}
+	pool.config = config
 
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		switch rr := rr.(type) {
 		case *dns.A:
-			pool.ipv4 = append(pool.ipv4, newNameserver(rr.Header().Name, rr.A.String()))
+			pool.ipv4 = append(pool.ipv4, newNameserver(rr.Header().Name, rr.A.String(), config))
 		case *dns.AAAA:
-			pool.ipv6 = append(pool.ipv6, newNameserver(rr.Header().Name, rr.AAAA.String()))
+			pool.ipv6 = append(pool.ipv6, newNameserver(rr.Header().Name, rr.AAAA.String(), config))
 		default:
 			// Continue
 		}

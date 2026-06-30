@@ -8,7 +8,7 @@ import (
 	"github.com/mr-torgue/dns"
 )
 
-func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger) (zone, error) {
+func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {
 	name = dns.CanonicalName(name)
 	parent = dns.CanonicalName(parent)
 
@@ -18,7 +18,7 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 
 	//---
 
-	pool := newNameserverPool(nameservers, extra)
+	pool := newNameserverPool(nameservers, extra, config)
 
 	switch pool.status() {
 	case PrimedButNeedsEnhancing:
@@ -43,6 +43,7 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 		zoneName:   name,
 		parentName: parent,
 		pool:       pool,
+		config:     config,
 	}
 
 	Debug(fmt.Sprintf("new zone created [%s]", name))

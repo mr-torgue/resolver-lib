@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestExchange_ValidDNSMessage(t *testing.T) {
 	factory := func(protocol string) dnsClient {
 		return mockClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -61,7 +62,7 @@ func TestExchange_NilDNSMessage(t *testing.T) {
 	factory := func(protocol string) dnsClient {
 		return mockClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	ctx := context.TODO()
 
@@ -79,7 +80,7 @@ func TestExchange_DNSClientError(t *testing.T) {
 	factory := func(protocol string) dnsClient {
 		return mockClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -110,7 +111,7 @@ func TestExchange_UDPErrorFallbackToTCP(t *testing.T) {
 		}
 		return tcpClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -148,7 +149,7 @@ func TestExchange_TruncatedResponseFallbackToTCP(t *testing.T) {
 		}
 		return tcpClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -187,7 +188,7 @@ func TestExchange_BothUDPAndTCPReturnErrors(t *testing.T) {
 		}
 		return tcpClient
 	}
-	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory}
+	ns := &nameserver{addr: "192.0.2.53", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -218,7 +219,7 @@ func TestExchange_IPv6AddressFormatting(t *testing.T) {
 		return mockClient
 	}
 
-	ns := &nameserver{addr: "2001:db8::1", dnsClientFactory: factory}
+	ns := &nameserver{addr: "2001:db8::1", dnsClientFactory: factory, config: ConfigBuilder()}
 
 	// Prepare the DNS message with a valid question
 	msg := new(dns.Msg)
@@ -243,7 +244,7 @@ func TestExchange_IPv6AddressFormatting(t *testing.T) {
 
 func TestDefaultDnsClientFactory_UDP(t *testing.T) {
 
-	ns := &nameserver{addr: "2001:db8::1"}
+	ns := &nameserver{addr: "2001:db8::1", config: ConfigBuilder()}
 
 	client := ns.defaultDnsClientFactory("udp")
 	// changed
@@ -260,7 +261,7 @@ func TestDefaultDnsClientFactory_UDP(t *testing.T) {
 
 func TestDefaultDnsClientFactory_TCP(t *testing.T) {
 
-	ns := &nameserver{addr: "2001:db8::1"}
+	ns := &nameserver{addr: "2001:db8::1", config: ConfigBuilder()}
 
 	client := ns.defaultDnsClientFactory("tcp")
 	// changed
@@ -404,11 +405,11 @@ func Test_exchange(t *testing.T) {
 		var got *nameserver
 		if ttconfig.expectPanic {
 			assert.Panics(t, func() {
-				SetConfig(ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify)))
+				ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify))
 			})
 		} else {
-			SetConfig(ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify)))
-			got = newNameserver(ttconfig.hostname, ttconfig.addr)
+			config := ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify))
+			got = newNameserver(ttconfig.hostname, ttconfig.addr, config)
 			assert.Equal(t, ttconfig.hostname, got.hostname)
 			assert.Equal(t, ttconfig.addr, got.addr)
 			// test client
@@ -505,11 +506,13 @@ func Test_newNameserver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.expectPanic {
 				assert.Panics(t, func() {
-					SetConfig(ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify)))
+					ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify))
 				})
 			} else {
-				SetConfig(ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify)))
-				got := newNameserver(tt.hostname, tt.addr)
+				config := ConfigBuilder(WithClient(tt.client, true), WithTLSVerification(!tt.insecureSkipVerify))
+				got := newNameserver(tt.hostname, tt.addr, config)
+				assert.NotNil(t, got.config)
+				assert.Equal(t, tt.insecureSkipVerify, got.config.insecureSkipVerify)
 				assert.Equal(t, tt.hostname, got.hostname)
 				assert.Equal(t, tt.addr, got.addr)
 				// test client
@@ -528,9 +531,9 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 		// Named input parameters for receiver constructor.
 		hostname           string
 		addr               string
-		dnsPort            string
-		doqPort            string
-		dotPort            string
+		dnsPort            int
+		doqPort            int
+		dotPort            int
 		pqcMode            bool
 		insecureSkipVerify bool
 		// Named input parameters for target function.
@@ -541,9 +544,9 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 			name:               "default settings",
 			hostname:           "example.com",
 			addr:               "1.2.3.4",
-			dnsPort:            "53",
-			doqPort:            "53",
-			dotPort:            "53",
+			dnsPort:            53,
+			doqPort:            53,
+			dotPort:            53,
 			pqcMode:            false,
 			insecureSkipVerify: false,
 			protocol:           "udp",
@@ -553,9 +556,9 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 			name:               "default settings",
 			hostname:           "example.com",
 			addr:               "1.2.3.4",
-			dnsPort:            "53",
-			doqPort:            "53",
-			dotPort:            "53",
+			dnsPort:            53,
+			doqPort:            53,
+			dotPort:            53,
 			pqcMode:            false,
 			insecureSkipVerify: false,
 			protocol:           "tcp",
@@ -565,9 +568,9 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 			name:               "default settings",
 			hostname:           "example.com",
 			addr:               "1.2.3.4",
-			dnsPort:            "53",
-			doqPort:            "53",
-			dotPort:            "53",
+			dnsPort:            53,
+			doqPort:            53,
+			dotPort:            53,
 			pqcMode:            false,
 			insecureSkipVerify: false,
 			protocol:           "dot",
@@ -576,9 +579,9 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 		{
 			name:               "default settings",
 			hostname:           "example.com",
-			dnsPort:            "53",
-			doqPort:            "53",
-			dotPort:            "53",
+			dnsPort:            53,
+			doqPort:            53,
+			dotPort:            53,
 			pqcMode:            false,
 			insecureSkipVerify: false,
 			addr:               "1.2.3.4",
@@ -588,15 +591,12 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// set globalconfig
-			GlobalConfig.dnsPort = tt.dnsPort
-			GlobalConfig.doqPort = tt.doqPort
-			GlobalConfig.dotPort = tt.dotPort
-			GlobalConfig.pqcMode = tt.pqcMode
-			GlobalConfig.insecureSkipVerify = tt.insecureSkipVerify
-			assert.NotNil(t, GlobalConfig.tlsCache) // just in case
 
-			n := newNameserver(tt.hostname, tt.addr)
+			config := ConfigBuilder(WithDNSPort(tt.dnsPort), WithDoQPort(tt.doqPort), WithDoTPort(tt.dotPort), WithPQCMode(tt.pqcMode), WithTLSVerification(!tt.insecureSkipVerify))
+			assert.NotNil(t, config.tlsCache) // just in case
+
+			n := newNameserver(tt.hostname, tt.addr, config)
+			assert.NotNil(t, n.config)
 			got := n.defaultDnsClientFactory(tt.protocol)
 			gotType := fmt.Sprintf("%T", got)
 			assert.Equal(t, tt.expectedClient, gotType)
@@ -608,7 +608,7 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 				assert.Equal(t, tt.insecureSkipVerify, n.quicClient.TLSConfig.InsecureSkipVerify)
 				assert.NotNil(t, n.quicClient.TLSConfig.ClientSessionCache)
 				client := got.(*clients.DOQClient)
-				assert.Equal(t, tt.doqPort, client.Port)
+				assert.Equal(t, strconv.Itoa(tt.doqPort), client.Port)
 
 				// check the curves
 				if tt.pqcMode {
@@ -632,7 +632,7 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 				assert.Equal(t, tt.insecureSkipVerify, n.tlsClient.Client.TLSConfig.InsecureSkipVerify)
 				assert.NotNil(t, n.tlsClient.Client.TLSConfig.ClientSessionCache)
 				client := got.(*clients.ClassicClient)
-				assert.Equal(t, tt.dotPort, client.Port)
+				assert.Equal(t, strconv.Itoa(tt.dotPort), client.Port)
 
 				// check the curves
 				if tt.pqcMode {
@@ -651,10 +651,8 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 
 			} else {
 				client := got.(*clients.ClassicClient)
-				assert.Equal(t, tt.dnsPort, client.Port)
+				assert.Equal(t, strconv.Itoa(tt.dnsPort), client.Port)
 			}
 		})
 	}
-
-	SetConfig(&DefaultConfig) // reset config
 }

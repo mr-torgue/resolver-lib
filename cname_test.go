@@ -3,10 +3,11 @@ package resolver
 import (
 	"context"
 	"errors"
-	"github.com/mr-torgue/dns"
-	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
+
+	"github.com/mr-torgue/dns"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCName_FoundAuthoritativeSuccess(t *testing.T) {
@@ -49,7 +50,7 @@ func TestCName_FoundAuthoritativeSuccess(t *testing.T) {
 		}
 	}
 
-	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger())
+	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger(), 1232)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, exchangeCalled)
@@ -96,7 +97,7 @@ func TestCName_FoundUnauthoritativeSrvFail(t *testing.T) {
 		}
 	}
 
-	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger())
+	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger(), 1232)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, exchangeCalled)
@@ -139,7 +140,7 @@ func TestCName_FoundAnswerAlreadyKnown(t *testing.T) {
 		}
 	}
 
-	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger())
+	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger(), 1232)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, exchangeCalled)
 }
@@ -178,7 +179,7 @@ func TestCName_ErrorReturned(t *testing.T) {
 		}
 	}
 
-	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger())
+	err := cname(ctx, qmsg, inputResponse, resolver.funcs.getExchanger(), 1232)
 
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrTest)

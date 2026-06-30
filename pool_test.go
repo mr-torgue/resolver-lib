@@ -37,10 +37,27 @@ func TestNewNameserverPool_Create(t *testing.T) {
 	}
 
 	// Execute: Create the nameserver pool
-	pool := newNameserverPool(nsRecords, extraRecords)
+	pool := newNameserverPool(nsRecords, extraRecords, ConfigBuilder())
 
 	// Assertions: Ensure the pool contains the expected nameservers with correct addresses
 	assert.NotNil(t, pool)
+	// test config, should be default
+	assert.NotNil(t, pool.config)
+	assert.Equal(t, []string{"udp", "tcp"}, pool.config.protocols)
+	assert.Equal(t, DefaultRootanchors, pool.config.rootAnchorFile)
+	assert.Equal(t, DefaultRootzone, pool.config.rootZoneFile)
+	assert.Equal(t, DefaultUDPSize, pool.config.udpsize)
+	assert.Equal(t, DefaultTimeoutUDP, pool.config.udpTimeout)
+	assert.Equal(t, DefaultTimeoutTCP, pool.config.tcpTimeout)
+	assert.Equal(t, DefaultTimeoutDOQ, pool.config.doqTimeout)
+	assert.Equal(t, DefaultTimeoutDOT, pool.config.dotTimeout)
+	assert.Equal(t, DefaultDNSPort, pool.config.dnsPort)
+	assert.Equal(t, DefaultDoQPort, pool.config.doqPort)
+	assert.Equal(t, DefaultDoTPort, pool.config.dotPort)
+	assert.NotNil(t, pool.config.tlsCache)
+	assert.False(t, pool.config.pqcMode)
+	assert.Equal(t, false, pool.config.insecureSkipVerify)
+	assert.Nil(t, pool.config.cache)
 
 	assert.Len(t, pool.hostsWithoutAddresses, 0)
 	assert.Len(t, pool.ipv4, 4)

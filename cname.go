@@ -8,7 +8,7 @@ import (
 	"github.com/mr-torgue/dns"
 )
 
-func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger) error {
+func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error {
 	cnames := extractRecords[*dns.CNAME](r.Msg.Answer)
 
 	targets := make([]string, len(cnames))
@@ -33,7 +33,8 @@ func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger)
 		cnameQMsg.SetQuestion(target, qmsg.Question[0].Qtype)
 
 		if isSetDO(qmsg) {
-			cnameQMsg.SetEdns0(GlobalConfig.udpsize, true)
+			//cnameQMsg.SetEdns0(GlobalConfig.udpsize, true)
+			cnameQMsg.SetEdns0(udpsize, true)
 		}
 
 		cnameRMsg := exchanger.exchange(ctx, cnameQMsg)

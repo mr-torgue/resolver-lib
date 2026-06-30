@@ -29,7 +29,7 @@ func TestCreateZone_SuccessWithoutEnrichment(t *testing.T) {
 	ctx := context.TODO()
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger)
+	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.NoError(t, err)
@@ -52,7 +52,7 @@ func TestCreateZone_PoolCreationFailsWithoutEnrichment(t *testing.T) {
 	ctx := context.TODO()
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger)
+	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.Nil(t, z)
@@ -85,7 +85,7 @@ func TestCreateZone_SuccessWithEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger)
+	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// AssertionsOk
 	assert.NoError(t, err)
@@ -120,7 +120,7 @@ func TestCreateZone_PoolCreationFailsWithEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger)
+	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.Nil(t, z)
@@ -155,7 +155,7 @@ func TestCreateZone_SuccessWithOptionalEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger)
+	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// AssertionsOk
 	assert.NoError(t, err)
