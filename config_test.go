@@ -117,7 +117,7 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, DefaultDNSPort, res.config.dnsPort)
 	assert.Equal(t, DefaultDoQPort, res.config.doqPort)
 	assert.Equal(t, DefaultDoTPort, res.config.dotPort)
-	assert.NotNil(t, res.config.tlsCache)
+	assert.Nil(t, res.config.tlsCache)
 	assert.False(t, res.config.pqcMode)
 	assert.Equal(t, false, res.config.insecureSkipVerify)
 	assert.Nil(t, res.config.cache)
@@ -162,9 +162,17 @@ func TestSetConfig(t *testing.T) {
 	res = NewResolver(ConfigBuilder(WithUDPSize(12345)))
 	assert.Equal(t, uint16(12345), res.config.udpsize)
 
-	// test cache
+	// test DNS cache
 	res = NewResolver(ConfigBuilder(WithCache(1234)))
 	assert.NotNil(t, res.config.cache)
+	res = NewResolver(ConfigBuilder(WithCache(0)))
+	assert.Nil(t, res.config.cache)
+
+	// test TLS session cache
+	res = NewResolver(ConfigBuilder(WithTLSCache(4444)))
+	assert.NotNil(t, res.config.tlsCache)
+	res = NewResolver(ConfigBuilder(WithTLSCache(0)))
+	assert.Nil(t, res.config.tlsCache)
 
 	res = NewResolver(&DefaultConfig) // reset config
 	assert.Equal(t, []string{"udp", "tcp"}, res.config.protocols)
@@ -178,7 +186,7 @@ func TestSetConfig(t *testing.T) {
 	assert.Equal(t, DefaultDNSPort, res.config.dnsPort)
 	assert.Equal(t, DefaultDoQPort, res.config.doqPort)
 	assert.Equal(t, DefaultDoTPort, res.config.dotPort)
-	assert.NotNil(t, res.config.tlsCache)
+	assert.Nil(t, res.config.tlsCache)
 	assert.False(t, res.config.pqcMode)
 	assert.Equal(t, false, res.config.insecureSkipVerify)
 	assert.Nil(t, res.config.cache)

@@ -592,8 +592,8 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			config := ConfigBuilder(WithDNSPort(tt.dnsPort), WithDoQPort(tt.doqPort), WithDoTPort(tt.dotPort), WithPQCMode(tt.pqcMode), WithTLSVerification(!tt.insecureSkipVerify))
-			assert.NotNil(t, config.tlsCache) // just in case
+			config := ConfigBuilder(WithDNSPort(tt.dnsPort), WithTLSCache(DefaultTLSCacheSize), WithDoQPort(tt.doqPort), WithDoTPort(tt.dotPort), WithPQCMode(tt.pqcMode), WithTLSVerification(!tt.insecureSkipVerify))
+			assert.NotNil(t, config.tlsCache)
 
 			n := newNameserver(tt.hostname, tt.addr, config)
 			assert.NotNil(t, n.config)

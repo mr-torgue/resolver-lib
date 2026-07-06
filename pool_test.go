@@ -37,7 +37,7 @@ func TestNewNameserverPool_Create(t *testing.T) {
 	}
 
 	// Execute: Create the nameserver pool
-	pool := newNameserverPool(nsRecords, extraRecords, ConfigBuilder())
+	pool := newNameserverPool(nsRecords, extraRecords, ConfigBuilder(WithTLSCache(DefaultTLSCacheSize)))
 
 	// Assertions: Ensure the pool contains the expected nameservers with correct addresses
 	assert.NotNil(t, pool)

@@ -35,7 +35,9 @@ const (
 	DefaultRootzone    = "named.root"
 	DefaultRootanchors = "root-anchors.xml"
 
-	DefaultCacheSize = 1024
+	// just some random values. no real thought went into this.
+	DefaultTLSCacheSize = 1024
+	DefaultCacheSize    = 2048
 )
 
 var (
@@ -138,7 +140,7 @@ var DefaultConfig = Config{
 	dnsPort:            DefaultDNSPort,
 	doqPort:            DefaultDoQPort,
 	dotPort:            DefaultDoTPort,
-	tlsCache:           tls.NewLRUClientSessionCache(DefaultCacheSize),
+	tlsCache:           nil,
 	pqcMode:            false,
 	insecureSkipVerify: false,
 	cache:              nil,
@@ -207,7 +209,11 @@ func WithTLSVerification(verify bool) Option {
 // WithTLSCache indicates the cache size.
 func WithTLSCache(capacity int) Option {
 	return func(c *Config) {
-		c.tlsCache = tls.NewLRUClientSessionCache(capacity)
+		if capacity == 0 {
+			c.tlsCache = nil
+		} else {
+			c.tlsCache = tls.NewLRUClientSessionCache(capacity)
+		}
 	}
 }
 
@@ -255,8 +261,14 @@ func WithTimeouts(udp, tcp, tls, quic time.Duration) Option {
 	}
 }
 
+// WithCache sets the DNS cache. If set to 0, it gets disabled.
+// Note: this is the DNS cache, not the TLS session cache.
 func WithCache(size int) Option {
 	return func(c *Config) {
-		c.cache = cache.NewCache(cache.WithCapacity(size))
+		if size == 0 {
+			c.cache = nil
+		} else {
+			c.cache = cache.NewCache(cache.WithCapacity(size))
+		}
 	}
 }
