@@ -27,7 +27,9 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	// use a smaller timeout
 	readCtx, cancelConnect := context.WithTimeout(ctx, c.Timeout)
 	defer cancelConnect()
-	session, err := quic.DialAddr(readCtx, addr, c.TLSConfig, nil)
+	//session, err := quic.DialAddr(readCtx, addr, c.TLSConfig, nil)
+	session, err := quic.DialAddrEarly(readCtx, addr, c.TLSConfig, nil)
+
 	// NOTE: is there a simpler way to detect if a server supports QUIC instead of relying on timeouts?
 	if err != nil {
 		return nil, 0, err
@@ -43,7 +45,8 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	}
 
 	t := time.Now()
-	stream, err := session.OpenStreamSync(ctx)
+	stream, err := session.OpenStream()
+	//stream, err := session.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
