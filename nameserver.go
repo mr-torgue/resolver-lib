@@ -68,10 +68,11 @@ func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	} else if protocol == "dot" {
 		if n.tlsClient == nil {
 			tlsconf := &tls.Config{
-				ServerName:         dns.Fqdn(n.hostname),
-				MinVersion:         tls.VersionTLS13,
-				InsecureSkipVerify: n.config.insecureSkipVerify,
-				ClientSessionCache: n.config.tlsCache,
+				ServerName:             dns.Fqdn(n.hostname),
+				MinVersion:             tls.VersionTLS13,
+				InsecureSkipVerify:     n.config.insecureSkipVerify,
+				ClientSessionCache:     n.config.tlsCache,
+				SessionTicketsDisabled: false,
 			}
 			if n.config.pqcMode {
 				tlsconf.CurvePreferences = []tls.CurveID{

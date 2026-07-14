@@ -51,13 +51,13 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 		return nil, 0, err
 	}
 
-	msgLen := uint16(len(b))
-	msgLenBytes := []byte{byte(msgLen >> 8), byte(msgLen & 0xFF)}
-	if _, err = stream.Write(msgLenBytes); err != nil {
-		return nil, 0, err
-	}
-	// Make a QUIC request to the DNS server with the DNS message as wire format bytes in the body.
-	if _, err = stream.Write(b); err != nil {
+	// Create a buffer for length (2 bytes) + message
+	blen := make([]byte, 2+len(b))
+	binary.BigEndian.PutUint16(blen[0:2], uint16(len(b)))
+	copy(blen[2:], b)
+
+	// Write in one go
+	if _, err = stream.Write(blen); err != nil {
 		return nil, 0, err
 	}
 
