@@ -605,6 +605,184 @@ func TestAuthenticate_ValidWithMultipleRRSigsForSameRRSet(t *testing.T) {
 	assert.False(t, set[2].wildcard)
 }
 
+// TestAuthenticate_UnsupportedAlgorithm_P256_FALCON512 tests that P256_FALCON512 (algorithm 18)
+// signatures are handled correctly. Since the library may or may not support this algorithm,
+// we test both scenarios.
+func TestAuthenticate_UnsupportedAlgorithm_P256_FALCON512(t *testing.T) {
+	rrset := []dns.RR{
+		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
+		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
+	}
+
+	// Create a key with algorithm 18 (P256_FALCON512)
+	key := testKeyWithAlgorithm(18)
+
+	// Create a fake RRSIG with algorithm 18
+	// Since we don't have a real private key for this algorithm, we'll create a fake signature
+	inception := time.Now().Add(time.Hour * -24).Unix()
+	expiration := time.Now().Add(time.Hour * 24).Unix()
+	rrsig := &dns.RRSIG{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeRRSIG,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Inception:  uint32(inception),
+		Expiration: uint32(expiration),
+		KeyTag:     key.key.KeyTag(),
+		SignerName: zoneName,
+		Algorithm:  18,
+		TypeCovered: dns.TypeMX,
+		// Fake signature data - this won't verify
+		Signature: []byte{0x01, 0x02, 0x03, 0x04},
+	}
+
+	rrset = append(rrset, rrsig)
+
+	set, err := authenticate(zoneName, rrset, []*dns.DNSKEY{key.key}, answerSection)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(set) != 1 {
+		t.Errorf("expected length of set to be 1, but got %d", len(set))
+	}
+
+	// This should fail because the algorithm is not supported or the signature is invalid
+	if valid := set.Valid(); valid {
+		t.Error("expected set to not be valid for unsupported algorithm P256_FALCON512")
+	}
+
+	err = set.Verify()
+	if err == nil {
+		t.Error("expected error but not found for unsupported algorithm P256_FALCON512")
+	}
+
+	// The error should be either ErrNoKeyFoundForSignature or ErrInvalidSignature
+	if !errors.Is(err, ErrNoKeyFoundForSignature) && !errors.Is(err, ErrInvalidSignature) && !errors.Is(err, ErrVerifyFailed) {
+		t.Errorf("expected error to be ErrNoKeyFoundForSignature, ErrInvalidSignature, or ErrVerifyFailed. got: %s", err.Error())
+	}
+}
+
+// TestAuthenticate_UnsupportedAlgorithm_MAYO1 tests that MAYO1 (algorithm 28)
+// signatures fail validation since the algorithm is not supported.
+func TestAuthenticate_UnsupportedAlgorithm_MAYO1(t *testing.T) {
+	rrset := []dns.RR{
+		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
+		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
+	}
+
+	// Create a key with algorithm 28 (MAYO1)
+	key := testKeyWithAlgorithm(28)
+
+	// Create a fake RRSIG with algorithm 28
+	inception := time.Now().Add(time.Hour * -24).Unix()
+	expiration := time.Now().Add(time.Hour * 24).Unix()
+	rrsig := &dns.RRSIG{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeRRSIG,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Inception:  uint32(inception),
+		Expiration: uint32(expiration),
+		KeyTag:     key.key.KeyTag(),
+		SignerName: zoneName,
+		Algorithm:  28,
+		TypeCovered: dns.TypeMX,
+		// Fake signature data - this won't verify
+		Signature: []byte{0x01, 0x02, 0x03, 0x04},
+	}
+
+	rrset = append(rrset, rrsig)
+
+	set, err := authenticate(zoneName, rrset, []*dns.DNSKEY{key.key}, answerSection)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(set) != 1 {
+		t.Errorf("expected length of set to be 1, but got %d", len(set))
+	}
+
+	// This should fail because the algorithm is not supported
+	if valid := set.Valid(); valid {
+		t.Error("expected set to not be valid for unsupported algorithm MAYO1")
+	}
+
+	err = set.Verify()
+	if err == nil {
+		t.Error("expected error but not found for unsupported algorithm MAYO1")
+	}
+
+	// The error should be either ErrNoKeyFoundForSignature or ErrInvalidSignature
+	if !errors.Is(err, ErrNoKeyFoundForSignature) && !errors.Is(err, ErrInvalidSignature) && !errors.Is(err, ErrVerifyFailed) {
+		t.Errorf("expected error to be ErrNoKeyFoundForSignature, ErrInvalidSignature, or ErrVerifyFailed. got: %s", err.Error())
+	}
+}
+
+// TestAuthenticate_NoMatchingDNSKEY tests that when there is no matching DNSKEY
+// for a signature, the validation fails.
+func TestAuthenticate_NoMatchingDNSKEY(t *testing.T) {
+	rrset := []dns.RR{
+		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
+		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
+	}
+
+	// Create a key with algorithm 13 (ECDSA P-256)
+	key := testEcKey()
+
+	// Create a fake RRSIG with a different algorithm (14 - ECDSA P-384)
+	// This won't match any DNSKEY
+	inception := time.Now().Add(time.Hour * -24).Unix()
+	expiration := time.Now().Add(time.Hour * 24).Unix()
+	rrsig := &dns.RRSIG{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeRRSIG,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Inception:  uint32(inception),
+		Expiration: uint32(expiration),
+		KeyTag:     12345, // Different key tag
+		SignerName: zoneName,
+		Algorithm:  14, // Different algorithm (ECDSA P-384)
+		TypeCovered: dns.TypeMX,
+		// Fake signature data
+		Signature: []byte{0x01, 0x02, 0x03, 0x04},
+	}
+
+	rrset = append(rrset, rrsig)
+
+	// Pass the ECDSA P-256 key, but the RRSIG is for algorithm 14
+	set, err := authenticate(zoneName, rrset, []*dns.DNSKEY{key.key}, answerSection)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(set) != 1 {
+		t.Errorf("expected length of set to be 1, but got %d", len(set))
+	}
+
+	// This should fail because there's no matching DNSKEY
+	if valid := set.Valid(); valid {
+		t.Error("expected set to not be valid when no matching DNSKEY")
+	}
+
+	err = set.Verify()
+	if err == nil {
+		t.Error("expected error but not found when no matching DNSKEY")
+	}
+
+	// The error should be ErrNoKeyFoundForSignature
+	if !errors.Is(err, ErrNoKeyFoundForSignature) && !errors.Is(err, ErrVerifyFailed) {
+		t.Errorf("expected error to be ErrNoKeyFoundForSignature or ErrVerifyFailed. got: %s", err.Error())
+	}
+}
+
 func TestAuthenticate_ValidWithMultipleRRSetsOfSameTypeDifferentName(t *testing.T) {
 
 	rrset1 := []dns.RR{

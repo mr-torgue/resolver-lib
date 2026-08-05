@@ -141,3 +141,60 @@ func (k *testKey) sign(rrset []dns.RR, inception, expiration int64) *dns.RRSIG {
 	}
 	return rrsig
 }
+
+// testKeyWithAlgorithm creates a test key with a specific algorithm number.
+// For unsupported algorithms, it creates a DNSKEY with the specified algorithm
+// but without a valid private key, which will cause verification to fail.
+func testKeyWithAlgorithm(algorithm uint8) *testKey {
+	dnskey := &dns.DNSKEY{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeDNSKEY,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Flags:     DnskeyFlagCsk,
+		Protocol:  3,
+		Algorithm: algorithm,
+		// For unsupported algorithms, we'll use a dummy public key
+		// This won't have a corresponding private key, so verification will fail
+		PublicKey: "AwEAAcBQb3J0YWJsZSBQdWJsaWNBLg==",
+	}
+	return &testKey{
+		ds:     dnskey.ToDS(dns.SHA256),
+		key:    dnskey,
+		signer: nil, // No private key for unsupported algorithms
+	}
+}
+
+// testKeyWithAlgorithmAndPrivateKey creates a test key with a specific algorithm
+// and a private key. This is used for algorithms that are supported.
+func testKeyWithAlgorithmAndPrivateKey(algorithm uint8, privateKey string) *testKey {
+	dnskey := &dns.DNSKEY{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeDNSKEY,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Flags:     DnskeyFlagCsk,
+		Protocol:  3,
+		Algorithm: algorithm,
+		PublicKey: "AwEAAcBQb3J0YWJsZSBQdWJsaWNBLg==",
+	}
+	// Try to parse the private key
+	var signer openssl.PrivateKey
+	var err error
+	if privateKey != "" {
+		signer, err = dnskey.ReadPrivateKey(strings.NewReader(privateKey), "test")
+		if err != nil {
+			// If we can't parse it, just continue without a signer
+			signer = nil
+		}
+	}
+	return &testKey{
+		ds:     dnskey.ToDS(dns.SHA256),
+		key:    dnskey,
+		signer: signer,
+	}
+}

@@ -6,6 +6,22 @@ import (
 	"time"
 )
 
+// isAlgorithmSupported checks if the given DNSSEC algorithm is supported by the underlying library.
+// This is necessary because the library may not support all algorithm numbers,
+// particularly newer PQC (Post-Quantum Cryptography) algorithms.
+func isAlgorithmSupported(algorithm uint8) bool {
+	// List of supported algorithms based on what the dns library supports.
+	// Currently supported: RSA/SHA-256, RSA/SHA-512, ECDSA P-256, ECDSA P-384, ED25519, ED448
+	switch algorithm {
+	case dns.RSASHA256, dns.RSASHA512, dns.ECDSAP256SHA256, dns.ECDSAP384SHA384, dns.ED25519, dns.ED448:
+		return true
+	default:
+		// For any other algorithm (including PQC algorithms like P256_FALCON512=18, MAYO1=28, MLDSA44=29),
+		// we assume it's not supported.
+		return false
+	}
+}
+
 func authenticate(zone string, rrsets []dns.RR, dnskeys []*dns.DNSKEY, section section) (signatures, error) {
 	zone = dns.CanonicalName(zone)
 
@@ -69,6 +85,13 @@ func authenticate(zone string, rrsets []dns.RR, dnskeys []*dns.DNSKEY, section s
 			// i.e. A key can have the same owner, Flags, Protocol, Algorithm and KeyTag.
 
 			if key.Algorithm == rrsig.Algorithm && key.KeyTag() == rrsig.KeyTag && dns.CanonicalName(key.Header().Name) == dns.CanonicalName(rrsig.SignerName) {
+
+				// Check if the algorithm is supported by the underlying library.
+				// If not, we cannot verify the signature and should treat it as invalid.
+				if !isAlgorithmSupported(key.Algorithm) {
+					sig.err = fmt.Errorf("%w: algorithm %d is not supported", ErrInvalidSignature, key.Algorithm)
+					continue
+				}
 
 				sig.err = rrsig.Verify(key, sig.rrset)
 

@@ -17,6 +17,15 @@ import (
 var uuidv7Regex = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 var uuidv7ShortRegex = regexp.MustCompile(`^[0-9a-f]{7}$`)
 
+// Helper function to create test RR
+func newTestRR(s string) dns.RR {
+	rr, err := dns.NewRR(s)
+	if err != nil {
+		panic(err)
+	}
+	return rr
+}
+
 //---
 
 func getMockZone(name, parent string) *mockZone {
@@ -1089,4 +1098,253 @@ func BenchmarkResolver_Exchange_TCP_1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = resolver.Exchange(context.Background(), msg)
 	}
+}
+
+// TestResolver_Exchange_UnsupportedAlgorithm_P256_FALCON512 tests that responses with
+// P256_FALCON512 (algorithm 18) signatures are handled correctly.
+// When DNSSEC validation is enabled (DO bit set), this should fail.
+// When CD bit is set, it should succeed.
+func TestResolver_Exchange_UnsupportedAlgorithm_P256_FALCON512(t *testing.T) {
+	// Create a mock zone that returns a response with P256_FALCON512 signature
+	root := &mockZone{
+		mockName: func() string {
+			return "."
+		},
+		mockParent: func() string {
+			return ""
+		},
+		mockDnskeys: func(ctx context.Context) ([]dns.RR, error) {
+			return nil, nil
+		},
+		mockExchange: func(ctx context.Context, m *dns.Msg) *Response {
+			// Create a response with P256_FALCON512 signature
+			response := new(dns.Msg)
+			response.SetReply(m)
+			response.Answer = []dns.RR{
+				newTestRR("example.com. 3600 IN A 192.0.2.1"),
+			}
+			// Add a fake RRSIG with algorithm 18 (P256_FALCON512)
+			rrsig := &dns.RRSIG{
+				Hdr: dns.RR_Header{
+					Name:   "example.com.",
+					Rrtype: dns.TypeRRSIG,
+					Class:  dns.ClassINET,
+					Ttl:    300,
+				},
+				Inception:  uint32(time.Now().Add(time.Hour * -24).Unix()),
+				Expiration: uint32(time.Now().Add(time.Hour * 24).Unix()),
+				KeyTag:     12345,
+				SignerName: "example.com.",
+				Algorithm:  18, // P256_FALCON512
+				TypeCovered: dns.TypeA,
+				Signature:   []byte{0x01, 0x02, 0x03, 0x04},
+			}
+			response.Answer = append(response.Answer, rrsig)
+			return &Response{Msg: response, Err: nil}
+		},
+		mockExpired: func() bool {
+			return false
+		},
+	}
+
+	mzs := &mockZoneStore{
+		mockGet: func(name string) zone {
+			return root
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+
+	resolver := &Resolver{
+		zones:  mzs,
+		config: ConfigBuilder(),
+	}
+
+	// Test 1: With DO bit set (DNSSEC validation enabled) - should fail
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("example.com.", dns.TypeA)
+	qmsg.SetEdns0(4096, true) // DO bit set
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	// Should have an error because the signature cannot be verified
+	assert.True(t, response.HasError(), "Expected error with DO bit set for unsupported algorithm")
+
+	// Test 2: With CD bit set (Checking Disabled) - should succeed
+	qmsg2 := &dns.Msg{}
+	qmsg2.SetQuestion("example.com.", dns.TypeA)
+	qmsg2.SetEdns0(4096, false)
+	// Set CD bit
+	qmsg2.CheckingDisabled = true
+
+	response2 := resolver.Exchange(context.Background(), qmsg2)
+	// Should succeed because CD bit is set
+	assert.False(t, response2.HasError(), "Expected no error with CD bit set")
+	assert.Len(t, response2.Msg.Answer, 2, "Expected 2 records in answer (A + RRSIG)")
+}
+
+// TestResolver_Exchange_UnsupportedAlgorithm_MAYO1 tests that responses with
+// MAYO1 (algorithm 28) signatures fail validation when DNSSEC is enabled.
+func TestResolver_Exchange_UnsupportedAlgorithm_MAYO1(t *testing.T) {
+	// Create a mock zone that returns a response with MAYO1 signature
+	root := &mockZone{
+		mockName: func() string {
+			return "."
+		},
+		mockParent: func() string {
+			return ""
+		},
+		mockDnskeys: func(ctx context.Context) ([]dns.RR, error) {
+			return nil, nil
+		},
+		mockExchange: func(ctx context.Context, m *dns.Msg) *Response {
+			// Create a response with MAYO1 signature
+			response := new(dns.Msg)
+			response.SetReply(m)
+			response.Answer = []dns.RR{
+				newTestRR("example.com. 3600 IN A 192.0.2.1"),
+			}
+			// Add a fake RRSIG with algorithm 28 (MAYO1)
+			rrsig := &dns.RRSIG{
+				Hdr: dns.RR_Header{
+					Name:   "example.com.",
+					Rrtype: dns.TypeRRSIG,
+					Class:  dns.ClassINET,
+					Ttl:    300,
+				},
+				Inception:  uint32(time.Now().Add(time.Hour * -24).Unix()),
+				Expiration: uint32(time.Now().Add(time.Hour * 24).Unix()),
+				KeyTag:     12345,
+				SignerName: "example.com.",
+				Algorithm:  28, // MAYO1
+				TypeCovered: dns.TypeA,
+				Signature:   []byte{0x01, 0x02, 0x03, 0x04},
+			}
+			response.Answer = append(response.Answer, rrsig)
+			return &Response{Msg: response, Err: nil}
+		},
+		mockExpired: func() bool {
+			return false
+		},
+	}
+
+	mzs := &mockZoneStore{
+		mockGet: func(name string) zone {
+			return root
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+
+	resolver := &Resolver{
+		zones:  mzs,
+		config: ConfigBuilder(),
+	}
+
+	// Test 1: With DO bit set (DNSSEC validation enabled) - should fail
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("example.com.", dns.TypeA)
+	qmsg.SetEdns0(4096, true) // DO bit set
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	// Should have an error because the signature cannot be verified
+	assert.True(t, response.HasError(), "Expected error with DO bit set for unsupported algorithm MAYO1")
+
+	// Test 2: With CD bit set (Checking Disabled) - should succeed
+	qmsg2 := &dns.Msg{}
+	qmsg2.SetQuestion("example.com.", dns.TypeA)
+	qmsg2.SetEdns0(4096, false)
+	// Set CD bit
+	qmsg2.CheckingDisabled = true
+
+	response2 := resolver.Exchange(context.Background(), qmsg2)
+	// Should succeed because CD bit is set
+	assert.False(t, response2.HasError(), "Expected no error with CD bit set")
+	assert.Len(t, response2.Msg.Answer, 2, "Expected 2 records in answer (A + RRSIG)")
+}
+
+// TestResolver_Exchange_NoMatchingDNSKEY tests that responses with signatures
+// that have no matching DNSKEY fail validation when DNSSEC is enabled.
+func TestResolver_Exchange_NoMatchingDNSKEY(t *testing.T) {
+	// Create a mock zone that returns a response with a signature
+	// but no matching DNSKEY
+	root := &mockZone{
+		mockName: func() string {
+			return "."
+		},
+		mockParent: func() string {
+			return ""
+		},
+		mockDnskeys: func(ctx context.Context) ([]dns.RR, error) {
+			// Return a DNSKEY with algorithm 13 (ECDSA P-256)
+			return nil, nil
+		},
+		mockExchange: func(ctx context.Context, m *dns.Msg) *Response {
+			// Create a response with a signature for algorithm 14 (ECDSA P-384)
+			// but no matching DNSKEY
+			response := new(dns.Msg)
+			response.SetReply(m)
+			response.Answer = []dns.RR{
+				newTestRR("example.com. 3600 IN A 192.0.2.1"),
+			}
+			// Add a fake RRSIG with algorithm 14 (ECDSA P-384)
+			// but we won't provide a matching DNSKEY
+			rrsig := &dns.RRSIG{
+				Hdr: dns.RR_Header{
+					Name:   "example.com.",
+					Rrtype: dns.TypeRRSIG,
+					Class:  dns.ClassINET,
+					Ttl:    300,
+				},
+				Inception:  uint32(time.Now().Add(time.Hour * -24).Unix()),
+				Expiration: uint32(time.Now().Add(time.Hour * 24).Unix()),
+				KeyTag:     12345,
+				SignerName: "example.com.",
+				Algorithm:  14, // ECDSA P-384
+				TypeCovered: dns.TypeA,
+				Signature:   []byte{0x01, 0x02, 0x03, 0x04},
+			}
+			response.Answer = append(response.Answer, rrsig)
+			return &Response{Msg: response, Err: nil}
+		},
+		mockExpired: func() bool {
+			return false
+		},
+	}
+
+	mzs := &mockZoneStore{
+		mockGet: func(name string) zone {
+			return root
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+
+	resolver := &Resolver{
+		zones:  mzs,
+		config: ConfigBuilder(),
+	}
+
+	// Test 1: With DO bit set (DNSSEC validation enabled) - should fail
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("example.com.", dns.TypeA)
+	qmsg.SetEdns0(4096, true) // DO bit set
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	// Should have an error because there's no matching DNSKEY
+	assert.True(t, response.HasError(), "Expected error with DO bit set when no matching DNSKEY")
+
+	// Test 2: With CD bit set (Checking Disabled) - should succeed
+	qmsg2 := &dns.Msg{}
+	qmsg2.SetQuestion("example.com.", dns.TypeA)
+	qmsg2.SetEdns0(4096, false)
+	// Set CD bit
+	qmsg2.CheckingDisabled = true
+
+	response2 := resolver.Exchange(context.Background(), qmsg2)
+	// Should succeed because CD bit is set
+	assert.False(t, response2.HasError(), "Expected no error with CD bit set")
+	assert.Len(t, response2.Msg.Answer, 2, "Expected 2 records in answer (A + RRSIG)")
 }
