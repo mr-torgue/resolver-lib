@@ -13,14 +13,14 @@ import (
 
 type SimplepLogger struct{}
 
-func (n SimplepLogger) Debug(args ...any)                 { fmt.Println("Query: " + fmt.Sprint(args...)) }
-func (n SimplepLogger) Debugf(format string, args ...any) { fmt.Printf("Query: "+format+"\n", args...) }
-func (n SimplepLogger) Info(args ...any)                  {}
-func (n SimplepLogger) Infof(format string, args ...any)  {}
-func (n SimplepLogger) Warn(args ...any)                  {}
-func (n SimplepLogger) Warnf(format string, args ...any)  {}
-func (n SimplepLogger) Error(args ...any)                 {}
-func (n SimplepLogger) Errorf(format string, args ...any) {}
+func (n SimplepLogger) Debug(args ...any)                   { fmt.Println("Query: " + fmt.Sprint(args...)) }
+func (n SimplepLogger) Debugf(format string, args ...any)   { fmt.Printf("Query: "+format+"\n", args...) }
+func (n SimplepLogger) Info(args ...any)                    {}
+func (n SimplepLogger) Infof(format string, args ...any)    {}
+func (n SimplepLogger) Warning(args ...any)                 {}
+func (n SimplepLogger) Warningf(format string, args ...any) {}
+func (n SimplepLogger) Error(args ...any)                   {}
+func (n SimplepLogger) Errorf(format string, args ...any)   {}
 
 func main() {
 	if len(os.Args) < 3 {
