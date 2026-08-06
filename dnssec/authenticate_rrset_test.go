@@ -44,6 +44,80 @@ func TestAuthenticate_ValidRSA(t *testing.T) {
 	}
 }
 
+func TestAuthenticate_ValidFALCON1024(t *testing.T) {
+	rrset := []dns.RR{
+		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
+		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
+	}
+
+	key := testKeyWithAlgorithm(20)
+
+	rrset = append(rrset, key.sign(rrset, 0, 0))
+
+	set, err := authenticate(zoneName, rrset, []*dns.DNSKEY{key.key}, answerSection)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(set) != 1 {
+		t.Errorf("expected length of set to be 1, but got %d", len(set))
+	}
+
+	if err := set.Verify(); err != nil {
+		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
+	}
+
+	if valid := set.Valid(); !valid {
+		t.Error("expected set to be valid")
+	}
+
+	if set[0].wildcard == true {
+		t.Error("expected wildcard to be false")
+	}
+}
+
+func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
+	assert.Panics(t, func() { testKeyWithAlgorithm(32) }) // note if we every use 32, this will not be asserted
+
+	rrset := []dns.RR{
+		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
+		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
+	}
+
+	// generate proper key, but change algorithm should fail
+	key := testKeyWithAlgorithm(20)
+	key.key.Algorithm = 32
+	assert.Panics(t, func() { key.sign(rrset, 0, 0) })
+
+	//
+	key.key.Algorithm = 20
+	rrsig := key.sign(rrset, 0, 0)
+	rrsig.Algorithm = 32
+	key.key.Algorithm = 32
+	rrset = append(rrset, rrsig)
+
+	set, err := authenticate(zoneName, rrset, []*dns.DNSKEY{key.key}, answerSection)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(set) != 1 {
+		t.Errorf("expected length of set to be 1, but got %d", len(set))
+	}
+
+	if err := set.Verify(); err == nil {
+		t.Errorf("expected Verify() to fail: %s", err.Error())
+	}
+
+	if valid := set.Valid(); valid {
+		t.Error("expected set to be not valid")
+	}
+
+	if set[0].wildcard == true {
+		t.Error("expected wildcard to be false")
+	}
+}
+
 func TestAuthenticate_ValidSECDSA(t *testing.T) {
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),

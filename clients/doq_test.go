@@ -42,7 +42,7 @@ func TestLookupDoQ(t *testing.T) {
 				{"[QUIC] Client should timeout", "miek.nl", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 4, "45.138.52.215", "context deadline exceeded"},
 				{"[QUIC] Client should timeout with smaller timeout", "miek.nl", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 1, "45.138.52.215", "context deadline exceeded"},
 				{"[QUIC] Client should give result", "miek.nl", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "45.138.52.215", ""},
-				{"[QUIC] Client should give result", "miek.nl", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "45.138.52.215", ""},
+				//{"[QUIC] Client should give result", "miek.nl", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "45.138.52.215", ""},
 			},
 		},
 	}

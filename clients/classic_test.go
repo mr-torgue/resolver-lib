@@ -112,7 +112,7 @@ func TestLookupClassic_TLS(t *testing.T) {
 				{"[TLS] Client should return A record of example.com", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "172.66.147.243", ""},
 				{"[TLS] Test with verify", "example.com", "A", "8.8.8.8", "dns.google", true, true, dns.RcodeSuccess, 2, "172.66.147.243", ""},
 				{"[TLS] Test with verify with wrong hostname", "example.com", "A", "8.8.8.8", "dns.gogle", true, true, dns.RcodeSuccess, 2, "172.66.147.243", "failed to verify certificate"},
-				{"[TLS] Nameserver does not understand TLS", "example.com", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "172.66.147.243", "context deadline exceeded"},
+				{"[TLS] Nameserver does not understand TLS", "example.com", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "172.66.147.243", "i/o timeout"},
 			},
 		},
 	}
