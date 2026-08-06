@@ -7,6 +7,7 @@ import (
 
 	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
+	"github.com/mr-torgue/resolver-lib/log"
 )
 
 const (
@@ -78,28 +79,21 @@ var (
 
 //---
 
-type Logger func(string)
+//type Logger func(string)
 
 // Default logging functions just black-hole the input.
 
-var Query Logger = func(s string) {}
-var Debug Logger = func(s string) {}
-var Info Logger = func(s string) {}
-var Warn Logger = func(s string) {}
+// Log is the package-level logger. It defaults to doing nothing.
+var Log log.Logger = log.NopLogger{}
 
-//---
-
-func init() {
-	go IPv6Available()
-	dnssec.Info = func(s string) {
-		Info(s)
+// SetLogger allows external users to override the package logger.
+func SetLogger(l log.Logger) {
+	if l == nil {
+		Log = log.NopLogger{}
+		return
 	}
-	dnssec.Warn = func(s string) {
-		Warn(s)
-	}
-	dnssec.Debug = func(s string) {
-		Debug(s)
-	}
+	Log = l
+	dnssec.SetLogger(l)
 }
 
 // The Config struct (c) contains the configuration for the resolver.

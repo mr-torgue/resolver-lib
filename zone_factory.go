@@ -46,7 +46,7 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 		config:     config,
 	}
 
-	Debug(fmt.Sprintf("new zone created [%s]", name))
+	Log.Debugf("new zone created [%s]", name)
 
 	// TODO: It would be good if we validated, via DNSSEC, nameserver details. Perhaps we could go do this.
 	// And use low TTLs until it's done.
@@ -106,7 +106,7 @@ func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exch
 		return fmt.Errorf("%w [%s]: enrichment timeout", ErrFailedEnrichingPool, zoneName)
 	}
 
-	Debug(fmt.Sprintf("zone pool enriched for [%s]", zoneName))
+	Log.Debugf("zone pool enriched for [%s]", zoneName)
 
 	return nil
 }

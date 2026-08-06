@@ -3,8 +3,9 @@ package dnssec
 import (
 	"context"
 	"fmt"
-	"github.com/mr-torgue/dns"
 	"slices"
+
+	"github.com/mr-torgue/dns"
 )
 
 func NewAuth(ctx context.Context, question dns.Question) *Authenticator {
@@ -54,8 +55,7 @@ func (a *Authenticator) AddResponse(zone Zone, msg *dns.Msg) error {
 	name := zone.Name()
 	position := dns.CountLabel(name)
 
-	log := fmt.Sprintf("Adding response for zone [%s] in position %d with qname [%s] and type [%d]", name, position, msg.Question[0].Name, msg.Question[0].Qtype)
-	Info(log)
+	Log.Debugf("Adding response for zone [%s] in position %d with qname [%s] and type [%d]", name, position, msg.Question[0].Name, msg.Question[0].Qtype)
 
 	// Ensure we are not passed more than one response for any given zone.
 	if v := a.inputBuffer[position]; v != nil {
@@ -77,6 +77,7 @@ func (a *Authenticator) AddResponse(zone Zone, msg *dns.Msg) error {
 
 		err := a.processResponse(in.zone, in.msg)
 		if err != nil {
+			Log.Errorf("Error in processResponse: %v", err)
 			return err
 		}
 	}
@@ -140,7 +141,7 @@ func (a *Authenticator) processResponse(zone Zone, msg *dns.Msg) error {
 
 	if err != nil {
 		// Any errors here are for debugging only.
-		Debug(fmt.Errorf("error processing response: %w", err).Error())
+		Log.Debug(fmt.Errorf("error processing response: %w", err).Error())
 		if r != nil {
 			r.err = err
 		}

@@ -8,7 +8,19 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/mr-torgue/dns"
 	"github.com/mr-torgue/resolver-lib"
+	"github.com/mr-torgue/resolver-lib/log"
 )
+
+type SimplepLogger struct{}
+
+func (n SimplepLogger) Debug(args ...any)                 { fmt.Println("Query: " + fmt.Sprint(args...)) }
+func (n SimplepLogger) Debugf(format string, args ...any) { fmt.Printf("Query: "+format+"\n", args...) }
+func (n SimplepLogger) Info(args ...any)                  {}
+func (n SimplepLogger) Infof(format string, args ...any)  {}
+func (n SimplepLogger) Warn(args ...any)                  {}
+func (n SimplepLogger) Warnf(format string, args ...any)  {}
+func (n SimplepLogger) Error(args ...any)                 {}
+func (n SimplepLogger) Errorf(format string, args ...any) {}
 
 func main() {
 	if len(os.Args) < 3 {
@@ -18,12 +30,8 @@ func main() {
 
 	domain := os.Args[1]
 	queryType := os.Args[2]
-	resolver.Query = func(s string) {
-		fmt.Println("Query: " + s)
-	}
-	resolver.Debug = func(s string) {
-		fmt.Println("Query: " + s)
-	}
+	var logger log.Logger = SimplepLogger{}
+	resolver.SetLogger(logger)
 
 	//r := resolver.NewResolver(*resolver.ConfigBuilder(resolver.WithCustomRoot("testdata/rootzones/custom.root", "testdata/rootanchors/custom-valid.xml")))
 	r := resolver.NewResolver(resolver.ConfigBuilder(resolver.WithClient("doq", true)))

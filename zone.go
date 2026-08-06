@@ -51,7 +51,7 @@ func (z *zoneImpl) expired() bool {
 func (z *zoneImpl) clone(name, parent string) zone {
 	// TODO: debugging
 	if canonicalName(name) == canonicalName(parent) || !dns.IsSubDomain(parent, name) {
-		Debug(fmt.Sprintf("child %s is not actually a child of parent: %s", name, parent))
+		Log.Debugf("child %s is not actually a child of parent: %s", name, parent)
 		panic("invalid clone")
 	}
 	return &zoneImpl{
@@ -68,7 +68,7 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 
 	if z.config.cache != nil {
 		if msg, err := z.config.cache.Get(z.zoneName, m); err != nil {
-			Warn(fmt.Errorf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err).Error())
+			Log.Warnf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err)
 		} else if msg != nil {
 			shortId := "unknown"
 			iteration := uint32(0)
@@ -76,14 +76,14 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 				shortId = trace.ShortID()
 				iteration = trace.Iteration()
 			}
-			Query(fmt.Sprintf(
+			Log.Debugf(
 				"%s-%d: response for [%s] %s in zone [%s] found in cache",
 				shortId,
 				iteration,
 				m.Question[0].Name,
 				TypeToString(m.Question[0].Qtype),
 				z.zoneName,
-			))
+			)
 			return &Response{Msg: msg.Copy()}
 		}
 	}
@@ -105,7 +105,7 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 			msg.Extra = removeRecordsOfType(msg.Extra, dns.TypeOPT)
 
 			if err := z.config.cache.Update(zone, question, msg); err != nil {
-				Warn(fmt.Errorf("error trying to perform a cache update for zone [%s]: %w", z.zoneName, err).Error())
+				Log.Warnf("error trying to perform a cache update for zone [%s]: %w", z.zoneName, err)
 			}
 		}(z.zoneName, m.Question[0], response.Msg.Copy())
 	}

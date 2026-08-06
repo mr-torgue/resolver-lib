@@ -45,7 +45,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	if !ok {
 		trace = newTraceWithStart(start)
 		ctx = context.WithValue(ctx, CtxTrace, trace)
-		Debug(fmt.Sprintf("New query started with Trace ID: %s", trace.ShortID()))
+		Log.Debugf("New query started with Trace ID: %s", trace.ShortID())
 	}
 
 	trace.Iterations.Add(1)
@@ -123,7 +123,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 		z, response = resolver.funcs.resolveLabel(ctx, &d, z, qmsg, auth)
 
 		if response != nil {
-			Debug(fmt.Sprintf("counter at end of exchange for iteration %d is %d", trace.Iterations.Load(), counter.Load()))
+			Log.Debugf("counter at end of exchange for iteration %d is %d", trace.Iterations.Load(), counter.Load())
 			return response
 		}
 	}
@@ -258,7 +258,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 	if auth != nil {
 		authTime := time.Now()
 		response.Auth, response.Doe, response.Err = auth.result()
-		Info(fmt.Sprintf("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String()))
+		Log.Infof("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String())
 
 		/*
 			   If the resolver accepts the RRset as authentic, the validator MUST
@@ -327,6 +327,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 
 	// We'll consider both of these 'normal' responses.
 	if !(response.Msg.Rcode == dns.RcodeSuccess || response.Msg.Rcode == dns.RcodeNameError) {
+		Log.Debugf("unsuccessful response code %s (%d)", RcodeToString(response.Msg.Rcode), response.Msg.Rcode)
 		response.Err = fmt.Errorf("unsuccessful response code %s (%d)", RcodeToString(response.Msg.Rcode), response.Msg.Rcode)
 	}
 

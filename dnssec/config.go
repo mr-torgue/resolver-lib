@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mr-torgue/dns"
+	"github.com/mr-torgue/resolver-lib/log"
 )
 
 const (
@@ -35,13 +36,17 @@ var (
 	MaxAllowedTTL = DefaultMaxAllowedTTL
 )
 
-type Logger func(string)
+// Log is the package-level logger. It defaults to doing nothing.
+var Log log.Logger = log.NopLogger{}
 
-// Default logging functions just black-hole the input.
-
-var Debug Logger = func(s string) {}
-var Info Logger = func(s string) {}
-var Warn Logger = func(s string) {}
+// SetLogger allows external users to override the package logger.
+func SetLogger(l log.Logger) {
+	if l == nil {
+		Log = log.NopLogger{}
+		return
+	}
+	Log = l
+}
 
 // TrustAnchor represents the root XML element.
 type TrustAnchor struct {

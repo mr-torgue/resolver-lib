@@ -16,9 +16,9 @@ func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger,
 		targets[i] = c.Target
 	}
 
-	Debug(fmt.Sprintf("resolved [%s]  to cnames: [%s]",
+	Log.Debugf("resolved [%s]  to cnames: [%s]",
 		qmsg.Question[0].Name,
-		strings.Join(targets, ", ")),
+		strings.Join(targets, ", "),
 	)
 
 	for _, c := range cnames {

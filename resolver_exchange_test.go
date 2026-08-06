@@ -119,6 +119,75 @@ func TestResolver_Exchange_RecursionNotDesired(t *testing.T) {
 	assert.ErrorIs(t, response.Err, ErrNotRecursionDesired)
 }
 
+func TestResolver_Exchange_ValidDNSSEC(t *testing.T) {
+	resolver := getTestResolverWithRoot()
+
+	ctx := context.Background()
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("srv.miek.nl.", dns.TypeSRV)
+	qmsg.SetEdns0(4096, true)
+
+	srv := new(dns.SRV)
+	srv.Hdr = dns.RR_Header{
+		Name:     "srv.miek.nl.",
+		Rrtype:   dns.TypeSRV,
+		Class:    dns.ClassINET,
+		Ttl:      14400,
+		Rdlength: 0,
+	}
+	srv.Port = 1000
+	srv.Weight = 800
+	srv.Target = "web1.miek.nl."
+
+	// With this key
+	key := new(dns.DNSKEY)
+	key.Hdr.Rrtype = dns.TypeDNSKEY
+	key.Hdr.Name = "miek.nl."
+	key.Hdr.Class = dns.ClassINET
+	key.Hdr.Ttl = 14400
+	key.Flags = 256
+	key.Protocol = 3
+	key.Algorithm = dns.ECDSAP256SHA256
+	privkey, err := key.Generate(256)
+	if err != nil {
+		t.Fatal("failure to generate key")
+	}
+
+	// Fill in the values of the Sig, before signing
+	sig := new(dns.RRSIG)
+	sig.Hdr = dns.RR_Header{
+		Name:     "miek.nl.",
+		Rrtype:   dns.TypeRRSIG,
+		Class:    dns.ClassINET,
+		Ttl:      14400,
+		Rdlength: 0,
+	}
+	sig.TypeCovered = srv.Hdr.Rrtype
+	sig.Labels = uint8(dns.CountLabel(srv.Hdr.Name)) // works for all 3
+	sig.OrigTtl = srv.Hdr.Ttl
+	sig.Expiration = 1296534305 // date -u '+%s' -d"2011-02-01 04:25:05"
+	sig.Inception = 1293942305  // date -u '+%s' -d"2011-01-02 04:25:05"
+	sig.KeyTag = key.KeyTag()   // Get the keyfrom the Key
+	sig.SignerName = key.Hdr.Name
+	sig.Algorithm = dns.ECDSAP256SHA256
+
+	if sig.Sign(privkey, []dns.RR{srv}) != nil {
+		t.Fatal("failure to sign the record")
+	}
+	rmsg := qmsg.SetReply(qmsg)
+	rmsg.Answer = []dns.RR{
+		srv,
+		sig,
+	}
+	expectedResponse := &Response{Msg: rmsg}
+
+	resolver.funcs.resolveLabel = func(ctx context.Context, d *domain, z zone, qmsg *dns.Msg, auth *authenticator) (zone, *Response) {
+		return nil, expectedResponse
+	}
+	response := resolver.Exchange(ctx, qmsg)
+	assert.Equal(t, expectedResponse, response)
+}
+
 func TestResolver_Exchange_Context(t *testing.T) {
 
 	// Test that the expect values are added to the context.
@@ -1045,7 +1114,30 @@ func TestResolver_Cache(t *testing.T) {
 // TestResolver_Exchange_Real resolves real domains.
 // Bit more error prone, so if it fails, it might be because of changing DNS info.
 func TestResolver_Exchange_Real(t *testing.T) {
-	// TODO
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("SiDn.nL.", dns.TypeA)
+	qmsg.Question[0].Name = "SiDn.nL."
+	qmsg.SetEdns0(1232, true)
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	assert.True(t, response.Msg.AuthenticatedData)
+
+	qmsg = &dns.Msg{}
+	qmsg.SetQuestion("sidN.nl.", dns.TypeA)
+	qmsg.SetEdns0(1232, true)
+
+	response = resolver.Exchange(context.Background(), qmsg)
+	assert.True(t, response.Msg.AuthenticatedData)
+
+	// domain with no trust anchor
+	qmsg = &dns.Msg{}
+	qmsg.SetQuestion("dlvtest.dns-oarc.net.", dns.TypeA)
+	qmsg.SetEdns0(1232, true)
+
+	response = resolver.Exchange(context.Background(), qmsg)
+	assert.True(t, response.Msg.AuthenticatedData)
 }
 
 // BenchmarkResolver_Exchange_UDP_1 benchmarks github.com.

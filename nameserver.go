@@ -143,7 +143,8 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 			shortId = trace.ShortID()
 			iteration = trace.Iteration()
 		}
-		Query(fmt.Sprintf(
+		// debug query
+		Log.Debugf(
 			"%s-%d: %s taken querying [%s] %s in zone [%s] on %s://%s (%s)",
 			shortId,
 			iteration,
@@ -154,7 +155,7 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 			protocol,
 			nameserver.hostname,
 			nameserver.addr,
-		))
+		)
 
 		go nameserver.updateMetrics(protocol, r.Duration)
 
