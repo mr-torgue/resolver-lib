@@ -141,3 +141,27 @@ func (k *testKey) sign(rrset []dns.RR, inception, expiration int64) *dns.RRSIG {
 	}
 	return rrsig
 }
+
+// testKeyWithAlgorithm creates a test key with a specific algorithm number.
+func testKeyWithAlgorithm(algorithm uint8) *testKey {
+	dnskey := &dns.DNSKEY{
+		Hdr: dns.RR_Header{
+			Name:   zoneName,
+			Rrtype: dns.TypeDNSKEY,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Flags:     DnskeyFlagCsk,
+		Protocol:  3,
+		Algorithm: algorithm,
+	}
+	secret, err := dnskey.Generate(0)
+	if err != nil {
+		panic(err)
+	}
+	return &testKey{
+		ds:     dnskey.ToDS(dns.SHA256),
+		key:    dnskey,
+		signer: secret,
+	}
+}

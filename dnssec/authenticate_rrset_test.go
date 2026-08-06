@@ -2,13 +2,14 @@ package dnssec
 
 import (
 	"errors"
-	"github.com/mr-torgue/dns"
-	"github.com/stretchr/testify/assert"
 	"net"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mr-torgue/dns"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAuthenticate_ValidRSA(t *testing.T) {

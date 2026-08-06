@@ -18,10 +18,10 @@ github.com/mattn/go-pointer v0.0.1 h1:n+XhsuGeVO6MEAp7xyEukFINEa+Quek5psIR/ylA6o
 github.com/mattn/go-pointer v0.0.1/go.mod h1:2zXcozF6qYGgmsG+SeTZz3oAbFLdD3OWqnUbNvJZAlc=
 github.com/mr-torgue/coredns v0.0.1 h1:bioiOWN211TRx6vFSi2A45wJXZmIGN6wE8PiDeqZ7HA=
 github.com/mr-torgue/coredns v0.0.1/go.mod h1:ITGi0uy0EfE7T9ae/aJ5mepqZgNUlKAbQNymDUZNCXo=
-github.com/mr-torgue/dns v1.1.4 h1:UhOPY8MYw6TtzODc9fRYOTQjMtXyw9hRZZ80PLP3VCg=
-github.com/mr-torgue/dns v1.1.4/go.mod h1:fVxuRAvqMYS1JZH/W2NffE0T5zvFTjc2DTaI0zEOuG4=
-github.com/mr-torgue/go-openssl v1.0.1 h1:HxExYMC7h4zh3EL6+k8wvTG0JnzeNVGm/zucDQ1LsLY=
-github.com/mr-torgue/go-openssl v1.0.1/go.mod h1:tzDUDy+DzAdhu0PjWiP8AxpL34QyFnCvHmdZlV8m7Mk=
+github.com/mr-torgue/dns v1.1.5 h1:CoN8fD0IylheOpNfLdJAeEqBitKESNbDrjv2ncWbvSk=
+github.com/mr-torgue/dns v1.1.5/go.mod h1:XF+rGNroRDmKQ/xNjD2FahSRMFQVkltPj9V37hQiwyM=
+github.com/mr-torgue/go-openssl v1.0.2 h1:3IgJC6sOkUiIxqHXgkEJeT6gdIUQJ/z9LY3GxIePA+c=
+github.com/mr-torgue/go-openssl v1.0.2/go.mod h1:tzDUDy+DzAdhu0PjWiP8AxpL34QyFnCvHmdZlV8m7Mk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"regexp"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1001,14 +1002,22 @@ func TestResolver_Exchange_Fallback(t *testing.T) {
 
 func TestResolver_Cache(t *testing.T) {
 	qmsg := &dns.Msg{}
-	qmsg.SetQuestion("folmer.info.", dns.TypeA)
+	qmsg.SetQuestion("example.com.", dns.TypeA)
 
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
 	require.NotNil(t, resolver.config.cache)
 
 	response := resolver.Exchange(context.Background(), qmsg)
-	assert.Equal(t, 1, len(response.Msg.Answer))
-	assert.Contains(t, response.Msg.Answer[0].String(), "65.109.0.142")
+	assert.Equal(t, 2, len(response.Msg.Answer))
+	// two ip addresses should be returned, we test for one of them
+	found := false
+	for _, answer := range response.Msg.Answer {
+		if strings.Contains(answer.String(), "172.66.147.243") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found)
 
 	// check cache
 	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)

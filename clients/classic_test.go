@@ -40,15 +40,15 @@ func TestLookupClassic_UDP_TCP(t *testing.T) {
 			clientType: "udp",
 			timeout:    2 * time.Second,
 			testCases: []TestCase{
-				{"[UDP] Client should return A record of folmer.info", "folmer.info", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 10, "65.109.0.142", ""},
-				{"[UDP] Use different resolver", "folmer.info", "A", "9.9.9.9", "dns.quad9.net", true, false, dns.RcodeSuccess, 10, "65.109.0.142", ""},
+				{"[UDP] Client should return A record of example.com", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 10, "172.66.147.243", ""},
+				{"[UDP] Use different resolver", "example.com", "A", "9.9.9.9", "dns.quad9.net", true, false, dns.RcodeSuccess, 10, "172.66.147.243", ""},
 				{"[UDP] Use different RR (TXT)", "folmer.info", "TXT", "9.9.9.9", "dns.quad9.net", true, false, dns.RcodeSuccess, 10, "protonmail-verification=9fcd905c800df450c63a61d5585f0ad3439bc0f5", ""},
 				{"[UDP] Set RD to false with public resolver", "folmer.info", "TXT", "8.8.8.8", "dns.google", false, false, dns.RcodeServerFailure, 10, "", ""}, // don't know why ServFail
 				{"[UDP] Set RD to false with root server", "folmer.info", "TXT", "198.41.0.4", "a.root-servers.net", false, false, dns.RcodeSuccess, 10, "a0.info.afilias-nst.info.", ""},
 				// use different domain
 				{"[UDP] Client should return NXDomain", "a.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeNameError, 10, "", ""},
 				{"[UDP] Client should not use TCP fallback", "cisco.com", "TXT", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 10, "", "truncated"},
-				{"[UDP] Client should timeout", "folmer.info", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 0, "65.109.0.142", "dial udp 8.8.8.8:53: i/o timeout"},
+				{"[UDP] Client should timeout", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 0, "172.66.147.243", "dial udp 8.8.8.8:53: i/o timeout"},
 			},
 		},
 		{
@@ -56,7 +56,7 @@ func TestLookupClassic_UDP_TCP(t *testing.T) {
 			clientType: "udp",
 			timeout:    1, // 0 is ignored
 			testCases: []TestCase{
-				{"[UDP] Client should timeout (global)", "folmer.info", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 1, "65.109.0.142", "dial udp 8.8.8.8:53: i/o timeout"},
+				{"[UDP] Client should timeout (global)", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 1, "172.66.147.243", "dial udp 8.8.8.8:53: i/o timeout"},
 			},
 		},
 		{
@@ -64,7 +64,7 @@ func TestLookupClassic_UDP_TCP(t *testing.T) {
 			clientType: "tcp",
 			timeout:    10 * time.Second,
 			testCases: []TestCase{
-				{"[TCP] Client should return A record of folmer.info", "folmer.info", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "65.109.0.142", ""},
+				{"[TCP] Client should return A record of example.com", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "172.66.147.243", ""},
 			},
 		},
 	}
@@ -109,10 +109,10 @@ func TestLookupClassic_TLS(t *testing.T) {
 			clientType: "tcp-tls",
 			timeout:    10 * time.Second,
 			testCases: []TestCase{
-				{"[TLS] Client should return A record of folmer.info", "folmer.info", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "65.109.0.142", ""},
-				{"[TLS] Test with verify", "folmer.info", "A", "8.8.8.8", "dns.google", true, true, dns.RcodeSuccess, 2, "65.109.0.142", ""},
-				{"[TLS] Test with verify with wrong hostname", "folmer.info", "A", "8.8.8.8", "dns.gogle", true, true, dns.RcodeSuccess, 2, "65.109.0.142", "failed to verify certificate"},
-				{"[TLS] Nameserver does not understand TLS", "folmer.info", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "65.109.0.142", "context deadline exceeded"},
+				{"[TLS] Client should return A record of example.com", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "172.66.147.243", ""},
+				{"[TLS] Test with verify", "example.com", "A", "8.8.8.8", "dns.google", true, true, dns.RcodeSuccess, 2, "172.66.147.243", ""},
+				{"[TLS] Test with verify with wrong hostname", "example.com", "A", "8.8.8.8", "dns.gogle", true, true, dns.RcodeSuccess, 2, "172.66.147.243", "failed to verify certificate"},
+				{"[TLS] Nameserver does not understand TLS", "example.com", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "172.66.147.243", "context deadline exceeded"},
 			},
 		},
 	}

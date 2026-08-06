@@ -39,10 +39,10 @@ func TestLookupDoQ(t *testing.T) {
 			clientType: "doq",
 			timeout:    2 * time.Second,
 			testCases: []TestCase{
-				{"[QUIC] Client should timeout", "folmer.info", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 4, "65.109.0.142", "context deadline exceeded"},
-				{"[QUIC] Client should timeout with smaller timeout", "folmer.info", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 1, "65.109.0.142", "context deadline exceeded"},
-				{"[QUIC] Client should give result", "folmer.info", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "65.109.0.142", ""},
-				{"[QUIC] Client should give result", "folmer.info", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "65.109.0.142", ""},
+				{"[QUIC] Client should timeout", "miek.nl", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 4, "45.138.52.215", "context deadline exceeded"},
+				{"[QUIC] Client should timeout with smaller timeout", "miek.nl", "A", "8.8.8.8", "dns.google", true, dns.RcodeSuccess, 1, "45.138.52.215", "context deadline exceeded"},
+				{"[QUIC] Client should give result", "miek.nl", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "45.138.52.215", ""},
+				{"[QUIC] Client should give result", "miek.nl", "A", "9.9.9.9", "dns.quad9.net", true, dns.RcodeSuccess, 1, "45.138.52.215", ""},
 			},
 		},
 	}
@@ -82,4 +82,29 @@ func TestLookupDoQ(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestLookupDoQ_TC(t *testing.T) {
+	// should not set the TC flag
+	qname := dns.Fqdn("miek.nl.")
+	tlsconf := &tls.Config{
+		NextProtos:         []string{"doq"},
+		ServerName:         dns.Fqdn("dns.quad9.net"),
+		InsecureSkipVerify: false,
+	}
+	client := DOQClient{
+		Port:      "853",
+		TLSConfig: tlsconf,
+		Timeout:   10 * time.Second,
+	}
+
+	qmsg := new(dns.Msg)
+	qmsg.SetQuestion(dns.Fqdn(qname), dns.TypeA)
+	qmsg.MsgHdr.RecursionDesired = true
+
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	rmsg, _, err := client.ExchangeContext(ctx, qmsg, "9.9.9.9")
+	assert.Nil(t, err)
+	assert.NotNil(t, rmsg)
+	assert.False(t, rmsg.Truncated)
 }
