@@ -115,16 +115,18 @@ func (c *Cache) UpdateWithTime(zone string, question dns.Question, msg *dns.Msg,
 			status := Indeterminate
 
 			h := records[0].Header()
-			entry := &Entry{
-				Name:       h.Name,
-				Type:       h.Rrtype,
-				Status:     status,
-				Records:    records,
-				Signatures: sigs[k],
-				TTL:        h.Ttl,
-				Expires:    now.Add(time.Duration(h.Ttl) * time.Second),
+			if h.Ttl > 0 {
+				entry := &Entry{
+					Name:       h.Name,
+					Type:       h.Rrtype,
+					Status:     status,
+					Records:    records,
+					Signatures: sigs[k],
+					TTL:        h.Ttl,
+					Expires:    now.Add(time.Duration(h.Ttl) * time.Second),
+				}
+				c.cache.Add(k, entry)
 			}
-			c.cache.Add(k, entry)
 		}
 	}
 	return nil
