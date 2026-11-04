@@ -1,12 +1,12 @@
 module github.com/mr-torgue/resolver-lib
 
-go 1.25.0
+go 1.27.3
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/google/uuid v1.6.0
-	github.com/mr-torgue/coredns v0.0.2
-	github.com/mr-torgue/dns v1.1.5
+	github.com/mr-torgue/coredns v0.0.4-openssl
+	github.com/mr-torgue/dns v1.1.6
 	github.com/mr-torgue/go-openssl v1.0.2
 	github.com/stretchr/testify v1.11.1
 )
