@@ -1065,6 +1065,8 @@ func TestResolver_Exchange_Fallback(t *testing.T) {
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
 	assert.True(t, response.Msg.Truncated)
 
 }
@@ -1077,6 +1079,8 @@ func TestResolver_Cache(t *testing.T) {
 	require.NotNil(t, resolver.config.cache)
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
 	assert.Equal(t, 2, len(response.Msg.Answer))
 	// two ip addresses should be returned, we test for one of them
 	found := false
@@ -1122,6 +1126,9 @@ func TestResolver_Exchange_Real(t *testing.T) {
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.Nil(t, response.Err)
+	require.NotNil(t, response.Msg)
 	assert.True(t, response.Msg.AuthenticatedData)
 
 	qmsg = &dns.Msg{}
