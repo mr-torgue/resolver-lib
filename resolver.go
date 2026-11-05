@@ -27,8 +27,13 @@ type resolverFunctions struct {
 }
 
 func NewResolver(config *Config) *Resolver {
-	// load files
-	dnssec.LoadAnchors(config.rootAnchorFile)
+	// load files; anchors are kept on this instance's config, not in package-level state
+	anchors, err := dnssec.ParseAnchors(config.rootAnchorFile)
+	if err != nil {
+		panic(err)
+	}
+	config.trustAnchors = anchors
+
 	rootZone, err := os.ReadFile(config.rootZoneFile)
 	if err != nil {
 		panic(err)

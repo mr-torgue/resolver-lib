@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"regexp"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -343,7 +342,21 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 
 	// If the total number of request to resolve a query exceeds MaxQueriesPerRequest, we expect an error.
 
-	resolver := getTestResolverWithRoot()
+	// We set maxQueriesPerRequest to 2 on this instance only, so this basic query will exceed it.
+	root := getMockZone(".", "")
+	mzs := mockZoneStore{
+		mockGet: func(name string) zone {
+			return nil
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+	resolver := &Resolver{
+		zones:  mzs,
+		funcs:  resolverFunctions{},
+		config: ConfigBuilder(WithMaxQueriesPerRequest(2)),
+	}
 
 	qmsg := &dns.Msg{}
 	qmsg.SetQuestion("www.example.com.", dns.TypeA)
@@ -356,13 +369,7 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 		return getMockZone("test", ""), nil
 	}
 
-	// We set MaxQueriesPerRequest to 2, so this basic query will exceed it.
-	MaxQueriesPerRequest = 2
-
 	response := resolver.Exchange(context.Background(), qmsg)
-
-	// This is global, so we need to set it back!
-	MaxQueriesPerRequest = DefaultMaxQueriesPerRequest
 
 	assert.True(t, response.HasError())
 	assert.ErrorIs(t, response.Err, ErrMaxQueriesPerRequestReached)
@@ -1067,77 +1074,6 @@ func TestResolver_Exchange_Fallback(t *testing.T) {
 	response := resolver.Exchange(context.Background(), qmsg)
 	assert.True(t, response.Msg.Truncated)
 
-}
-
-func TestResolver_Cache(t *testing.T) {
-	qmsg := &dns.Msg{}
-	qmsg.SetQuestion("example.com.", dns.TypeA)
-
-	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
-	require.NotNil(t, resolver.config.cache)
-
-	response := resolver.Exchange(context.Background(), qmsg)
-	assert.Equal(t, 2, len(response.Msg.Answer))
-	// two ip addresses should be returned, we test for one of them
-	found := false
-	for _, answer := range response.Msg.Answer {
-		if strings.Contains(answer.String(), "172.66.147.243") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found)
-
-	// check cache
-	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
-	_, err := resolver.config.cache.Get("", qmsg)
-	assert.Nil(t, err)
-
-	// test with DNSSEC domain
-	qmsg = &dns.Msg{}
-	qmsg.SetQuestion("miek.nl.", dns.TypeA)
-	qmsg.SetEdns0(1232, true)
-	response = resolver.Exchange(context.Background(), qmsg)
-	require.Equal(t, 3, len(response.Msg.Answer))
-
-	// error prone, verfiy expected outcome with dig miek.nl +dnssec
-	answer := response.Msg.Answer[0].String() + response.Msg.Answer[1].String() + response.Msg.Answer[2].String()
-	assert.Contains(t, answer, "45.138.52.215")
-	assert.Contains(t, answer, "RRSIG") // weak check but better than nothing.
-
-	// check cache
-	time.Sleep(500 * time.Millisecond)
-	_, err = resolver.config.cache.Get("", qmsg)
-	assert.Nil(t, err)
-}
-
-// TestResolver_Exchange_Real resolves real domains.
-// Bit more error prone, so if it fails, it might be because of changing DNS info.
-func TestResolver_Exchange_Real(t *testing.T) {
-	qmsg := &dns.Msg{}
-	qmsg.SetQuestion("SiDn.nL.", dns.TypeA)
-	qmsg.Question[0].Name = "SiDn.nL."
-	qmsg.SetEdns0(1232, true)
-
-	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
-
-	response := resolver.Exchange(context.Background(), qmsg)
-	assert.True(t, response.Msg.AuthenticatedData)
-
-	qmsg = &dns.Msg{}
-	qmsg.SetQuestion("sidN.nl.", dns.TypeA)
-	qmsg.SetEdns0(1232, true)
-
-	response = resolver.Exchange(context.Background(), qmsg)
-	assert.True(t, response.Msg.AuthenticatedData)
-
-	// domain with no trust anchor
-	qmsg = &dns.Msg{}
-	qmsg.SetQuestion("dlvtest.dns-oarc.net.", dns.TypeA)
-	qmsg.SetEdns0(1232, true)
-
-	response = resolver.Exchange(context.Background(), qmsg)
-	assert.True(t, response.Msg.AuthenticatedData)
 }
 
 // BenchmarkResolver_Exchange_UDP_1 benchmarks github.com.

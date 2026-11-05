@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mr-torgue/dns"
 	"github.com/mr-torgue/resolver-lib/cache"
-	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/mr-torgue/resolver-lib/log"
 )
 
@@ -41,6 +41,9 @@ const (
 	DefaultCacheSize    = 2048
 )
 
+// The package-level variables below are only defaults. They are copied into each
+// Config when ConfigBuilder runs and are never read at runtime afterwards, so
+// concurrent Resolver instances are fully independent of each other.
 var (
 	// MaxAllowedTTL define the maximum TTL that we'll cache any record for. This overrides any TTLs set by records
 	// we receive. Shorter TTLs on received records will still be respected.
@@ -83,17 +86,17 @@ var (
 
 // Default logging functions just black-hole the input.
 
-// Log is the package-level logger. It defaults to doing nothing.
+// Log is the package-level default logger. It defaults to doing nothing.
 var Log log.Logger = log.NopLogger{}
 
-// SetLogger allows external users to override the package logger.
+// SetLogger allows external users to override the package-level default logger.
+// It only affects Configs built afterwards (see ConfigBuilder).
 func SetLogger(l log.Logger) {
 	if l == nil {
 		Log = log.NopLogger{}
 		return
 	}
 	Log = l
-	dnssec.SetLogger(l)
 }
 
 // The Config struct (c) contains the configuration for the resolver.
@@ -119,6 +122,26 @@ type Config struct {
 	insecureSkipVerify bool // indicates if we check tls or not
 	// cache
 	cache CacheInterface
+	// per-instance behaviour knobs (defaults copied from the package-level vars)
+	maxAllowedTTL                             uint32
+	maxQueriesPerRequest                      uint32
+	desireNumberOfNameserversPerZone          int
+	lazyEnrichment                            bool
+	suppressBogusResponseSections             bool
+	removeAuthoritySectionForPositiveAnswers  bool
+	removeAdditionalSectionForPositiveAnswers bool
+	// DNSSEC
+	trustAnchors []*dns.DS
+	// logging
+	logger log.Logger
+}
+
+// loggerOrDefault returns the instance logger, falling back to the package default.
+func (c *Config) loggerOrDefault() log.Logger {
+	if c.logger != nil {
+		return c.logger
+	}
+	return Log
 }
 
 // DefaultConfig is a working default configuration.
@@ -143,12 +166,73 @@ var DefaultConfig = Config{
 type Option func(*Config)
 
 // ConfigBuilder builds a configuration based on the provided options.
+// The package-level default variables are snapshotted here; later changes to them
+// do not affect the returned Config.
 func ConfigBuilder(options ...Option) *Config {
 	c := DefaultConfig
+	c.maxAllowedTTL = MaxAllowedTTL
+	c.maxQueriesPerRequest = MaxQueriesPerRequest
+	c.desireNumberOfNameserversPerZone = DesireNumberOfNameserversPerZone
+	c.lazyEnrichment = LazyEnrichment
+	c.suppressBogusResponseSections = SuppressBogusResponseSections
+	c.removeAuthoritySectionForPositiveAnswers = RemoveAuthoritySectionForPositiveAnswers
+	c.removeAdditionalSectionForPositiveAnswers = RemoveAdditionalSectionForPositiveAnswers
+	c.logger = Log
 	for _, o := range options {
 		o(&c)
 	}
 	return &c
+}
+
+// WithMaxAllowedTTL sets the maximum TTL cached for any record.
+func WithMaxAllowedTTL(ttl uint32) Option {
+	return func(c *Config) { c.maxAllowedTTL = ttl }
+}
+
+// WithMaxQueriesPerRequest sets the maximum number of DNS lookups per Exchange call.
+func WithMaxQueriesPerRequest(max uint32) Option {
+	return func(c *Config) { c.maxQueriesPerRequest = max }
+}
+
+// WithDesireNumberOfNameserversPerZone sets how many nameserver addresses a zone pool should try to know.
+func WithDesireNumberOfNameserversPerZone(n int) Option {
+	return func(c *Config) { c.desireNumberOfNameserversPerZone = n }
+}
+
+// WithLazyEnrichment toggles lazy pool enrichment for this instance.
+func WithLazyEnrichment(lazy bool) Option {
+	return func(c *Config) { c.lazyEnrichment = lazy }
+}
+
+// WithSuppressBogusResponseSections toggles suppression of response sections for Bogus answers.
+func WithSuppressBogusResponseSections(suppress bool) Option {
+	return func(c *Config) { c.suppressBogusResponseSections = suppress }
+}
+
+// WithRemoveAuthoritySectionForPositiveAnswers toggles removal of the Authority section for positive answers.
+func WithRemoveAuthoritySectionForPositiveAnswers(remove bool) Option {
+	return func(c *Config) { c.removeAuthoritySectionForPositiveAnswers = remove }
+}
+
+// WithRemoveAdditionalSectionForPositiveAnswers toggles removal of the Additional section for positive answers.
+func WithRemoveAdditionalSectionForPositiveAnswers(remove bool) Option {
+	return func(c *Config) { c.removeAdditionalSectionForPositiveAnswers = remove }
+}
+
+// WithTrustAnchors sets the DNSSEC trust anchors for this instance.
+func WithTrustAnchors(anchors []*dns.DS) Option {
+	return func(c *Config) { c.trustAnchors = anchors }
+}
+
+// WithLogger sets the logger for this instance.
+func WithLogger(l log.Logger) Option {
+	return func(c *Config) {
+		if l == nil {
+			c.logger = log.NopLogger{}
+			return
+		}
+		c.logger = l
+	}
 }
 
 // WithCustomRoot overwrites the standard rootzone and anchors.

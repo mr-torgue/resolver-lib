@@ -13,6 +13,7 @@ type Zone interface {
 type Authenticator struct {
 	ctx      context.Context
 	question dns.Question
+	cfg      Config
 
 	inputBuffer    []*input
 	inputBufferIdx int

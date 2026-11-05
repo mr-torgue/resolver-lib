@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/mr-torgue/dns"
-	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,10 +104,9 @@ func TestNewResolver_ConcurrentConstruction(t *testing.T) {
 	for i, r := range resolvers {
 		require.NotNil(t, r, "resolver %d", i)
 		assert.Equal(t, 1, r.CountZones(), "resolver %d should have only the root zone", i)
+		// Each instance carries its own trust anchors; no shared global is written.
+		assert.NotEmpty(t, r.config.trustAnchors, "resolver %d should have its own trust anchors", i)
 	}
-
-	// The anchors were (re)loaded into the shared global; it must be populated.
-	assert.NotEmpty(t, dnssec.RootTrustAnchors)
 }
 
 // TestTwoResolvers_ConcurrentZoneCreation has two resolvers create child zones
@@ -187,7 +185,7 @@ func TestNameserverPool_ConcurrentEnrich(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				_ = enrichPool(context.Background(), "example.com.", pool, exchanger)
+				_ = enrichPool(context.Background(), "example.com.", pool, exchanger, ConfigBuilder())
 			} else {
 				for j := 0; j < 50; j++ {
 					_ = pool.status()
@@ -202,13 +200,10 @@ func TestNameserverPool_ConcurrentEnrich(t *testing.T) {
 	assert.Equal(t, PoolPrimed, pool.status())
 }
 
-// TestGlobalConfig_InterferenceBetweenResolvers documents that the package-level
-// settings (e.g. LazyEnrichment) are shared by all Resolver instances: changing the
-// global affects every resolver, which is how separate `resolver {}` blocks in one
-// CoreDNS process can influence each other.
-func TestGlobalConfig_InterferenceBetweenResolvers(t *testing.T) {
-	defer func() { LazyEnrichment = DefaultLazyEnrichment }()
-
+// TestInstances_IndependentConfig verifies that two resolvers built with different
+// per-instance options behave independently, and that mutating the package-level
+// default variables afterwards does not affect already-built resolvers.
+func TestInstances_IndependentConfig(t *testing.T) {
 	nameservers := []*dns.NS{
 		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns1.example.com."},
 		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns2.example.com."},
@@ -229,25 +224,24 @@ func TestGlobalConfig_InterferenceBetweenResolvers(t *testing.T) {
 		},
 	}
 
-	// Two pools for two would-be resolvers; with one primed IP but < DesireNumberOfNameserversPerZone,
-	// the status is PrimedButNeedsEnhancing and createZone only enriches when the global LazyEnrichment is false.
-	LazyEnrichment = false
-	z1, err1 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder())
+	// Two would-be resolvers with different lazyEnrichment settings.
+	// With one primed IP but < desireNumberOfNameserversPerZone, a pool is PrimedButNeedsEnhancing,
+	// and createZone only enriches in the background when lazyEnrichment is false.
+	z1, err1 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(false)))
+	z2, err2 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(true)))
 
-	LazyEnrichment = true
-	z2, err2 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder())
-
-	// Both calls succeed, but the global flag decided the behaviour for both resolvers alike.
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	require.NotNil(t, z1)
 	require.NotNil(t, z2)
 
-	// z1 was created while LazyEnrichment was false, so it spawned a background enrichment;
-	// z2 was created while LazyEnrichment was true, so its pool is still waiting for enrichment.
-	// The single global flag drove both behaviours.
+	// Mutating the package-level default afterwards must not change existing instances.
+	defer func() { LazyEnrichment = DefaultLazyEnrichment }()
+	LazyEnrichment = true
+
 	pool2 := z2.(*zoneImpl).pool.(*nameserverPool)
 	assert.Equal(t, PrimedButNeedsEnhancing, pool2.status())
+	assert.False(t, z1.(*zoneImpl).config.lazyEnrichment == z2.(*zoneImpl).config.lazyEnrichment)
 
-	fmt.Println("both resolvers affected by the same global LazyEnrichment value")
+	fmt.Println("each resolver keeps its own lazyEnrichment setting")
 }
