@@ -83,7 +83,7 @@ func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exch
 	}
 
 	// Bound enrichment to a maximum of 3 seconds or the caller context
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup

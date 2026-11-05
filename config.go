@@ -27,7 +27,7 @@ const (
 	DefaultUDPSize    uint16 = 8192
 	DefaultTimeoutUDP        = 400 * time.Millisecond
 	DefaultTimeoutTCP        = 1000 * time.Millisecond
-	DefaultTimeoutDOQ        = 1500 * time.Millisecond
+	DefaultTimeoutDOQ        = 600 * time.Millisecond
 	DefaultTimeoutDOT        = 1500 * time.Millisecond
 	DefaultDNSPort           = "53"
 	DefaultDoQPort           = "853"

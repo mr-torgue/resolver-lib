@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mr-torgue/dns"
@@ -34,7 +35,32 @@ type nameserver struct {
 	numberOfTcpRequests uint32
 	protocolRatio       float32
 
+	// negative cache: set when a DoQ/DoT attempt against this address fails
+	doqFailed atomic.Bool
+	dotFailed atomic.Bool
+
 	config *Config // make sure that this config points to the same as resolver
+}
+
+// protoSkipped reports whether a protocol should be skipped for this nameserver.
+// udp/tcp are never skipped (they're cheap to try).
+func (n *nameserver) protoSkipped(protocol string) bool {
+	switch protocol {
+	case "doq":
+		return n.doqFailed.Load()
+	case "dot":
+		return n.dotFailed.Load()
+	}
+	return false
+}
+
+func (n *nameserver) markProto(protocol string, failed bool) {
+	switch protocol {
+	case "doq":
+		n.doqFailed.Store(failed)
+	case "dot":
+		n.dotFailed.Store(failed)
+	}
 }
 
 // Todo: use same tlsconfig for doq and dot to reuse code.
@@ -131,6 +157,10 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 
 	r := Response{}
 	for _, protocol := range nameserver.config.protocols {
+		if nameserver.protoSkipped(protocol) {
+			continue // e.g. this server has no DoQ: don't pay the dial timeout again
+		}
+
 		client := factory(protocol)
 
 		r.Msg, r.Duration, r.Err = client.ExchangeContext(ctx, m, nameserver.addr)
@@ -161,8 +191,10 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 
 		// If we got an error back, we'll continue to maybe try again.
 		if r.HasError() {
+			nameserver.markProto(protocol, true) // blacklist protocol for this server
 			continue
 		}
+		nameserver.markProto(protocol, false) // success: clear the flag
 
 		// Then we can return straight away.
 		if !r.Msg.Truncated {
