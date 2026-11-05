@@ -8,7 +8,17 @@ import (
 	"github.com/mr-torgue/dns"
 )
 
-func NewAuth(ctx context.Context, question dns.Question) *Authenticator {
+// NewAuth creates an Authenticator. The optional Options make the instance independent
+// of any other instance; without options the package-level defaults are used.
+func NewAuth(ctx context.Context, question dns.Question, opts ...Option) *Authenticator {
+	cfg := DefaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = Log
+	}
+
 	// Function map. Allows overriding for testing.
 	v := &verifier{
 		verifyDNSKEYs:              verifyDNSKEYs,
@@ -27,6 +37,7 @@ func NewAuth(ctx context.Context, question dns.Question) *Authenticator {
 	return &Authenticator{
 		ctx:         ctx,
 		question:    question,
+		cfg:         cfg,
 		inputBuffer: make([]*input, maxExpectedItems),
 		results:     make([]*result, 0, maxExpectedItems),
 		verify:      v.verify,
@@ -55,7 +66,7 @@ func (a *Authenticator) AddResponse(zone Zone, msg *dns.Msg) error {
 	name := zone.Name()
 	position := dns.CountLabel(name)
 
-	Log.Debugf("Adding response for zone [%s] in position %d with qname [%s] and type [%d]", name, position, msg.Question[0].Name, msg.Question[0].Qtype)
+	a.cfg.Logger.Debugf("Adding response for zone [%s] in position %d with qname [%s] and type [%d]", name, position, msg.Question[0].Name, msg.Question[0].Qtype)
 
 	// Ensure we are not passed more than one response for any given zone.
 	if v := a.inputBuffer[position]; v != nil {
@@ -77,7 +88,7 @@ func (a *Authenticator) AddResponse(zone Zone, msg *dns.Msg) error {
 
 		err := a.processResponse(in.zone, in.msg)
 		if err != nil {
-			Log.Errorf("Error in processResponse: %v", err)
+			a.cfg.Logger.Errorf("Error in processResponse: %v", err)
 			return err
 		}
 	}
@@ -90,7 +101,7 @@ func (a *Authenticator) processResponse(zone Zone, msg *dns.Msg) error {
 
 	var last *result
 	if len(a.results) == 0 {
-		last = &result{dsRecords: RootTrustAnchors}
+		last = &result{dsRecords: a.cfg.TrustAnchors}
 	} else {
 		last = a.results[len(a.results)-1]
 
@@ -141,7 +152,7 @@ func (a *Authenticator) processResponse(zone Zone, msg *dns.Msg) error {
 
 	if err != nil {
 		// Any errors here are for debugging only.
-		Log.Debug(fmt.Errorf("error processing response: %w", err).Error())
+		a.cfg.Logger.Debug(fmt.Errorf("error processing response: %w", err).Error())
 		if r != nil {
 			r.err = err
 		}

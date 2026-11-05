@@ -23,7 +23,8 @@ type nameserver struct {
 	addr     string
 
 	dnsClientFactory dnsClientFactory
-	// store for reuse
+	// store for reuse; guarded by clientLock as they are created lazily
+	clientLock sync.Mutex
 	quicClient *clients.DOQClient
 	tlsClient  *clients.ClassicClient
 
@@ -40,6 +41,8 @@ type nameserver struct {
 // Todo: use same tlsconfig for doq and dot to reuse code.
 func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 	if protocol == "doq" {
+		n.clientLock.Lock()
+		defer n.clientLock.Unlock()
 		// set up client
 		if n.quicClient == nil {
 			tlsconf := &tls.Config{
@@ -66,6 +69,8 @@ func (n *nameserver) defaultDnsClientFactory(protocol string) dnsClient {
 		}
 		return n.quicClient
 	} else if protocol == "dot" {
+		n.clientLock.Lock()
+		defer n.clientLock.Unlock()
 		if n.tlsClient == nil {
 			tlsconf := &tls.Config{
 				ServerName:             dns.Fqdn(n.hostname),
@@ -144,7 +149,7 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 			iteration = trace.Iteration()
 		}
 		// debug query
-		Log.Debugf(
+		nameserver.config.loggerOrDefault().Debugf(
 			"%s-%d: %s taken querying [%s] %s in zone [%s] on %s://%s (%s)",
 			shortId,
 			iteration,

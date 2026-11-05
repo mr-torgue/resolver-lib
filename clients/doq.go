@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/mr-torgue/dns"
@@ -14,27 +15,63 @@ import (
 )
 
 // DOQClient represents the config options for setting up a DOQ based client.
+// It keeps a single QUIC session per client and reuses it for all queries,
+// which avoids a full QUIC+TLS handshake on every exchange.
 type DOQClient struct {
 	Port      string
 	TLSConfig *tls.Config
 	Timeout   time.Duration
+
+	mu      sync.Mutex
+	session *quic.Conn
+}
+
+// getSession returns the shared session, dialing a new one if needed.
+func (c *DOQClient) getSession(ctx context.Context, addr string) (*quic.Conn, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.session != nil {
+		return c.session, nil
+	}
+
+	dialCtx, cancel := context.WithTimeout(ctx, c.Timeout)
+	defer cancel()
+
+	session, err := quic.DialAddrEarly(dialCtx, addr, c.TLSConfig, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.session = session
+	return session, nil
+}
+
+// dropSession forgets the session if it is the current one, so the next query redials.
+func (c *DOQClient) dropSession(session *quic.Conn) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.session == session {
+		c.session = nil
+	}
+	_ = session.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
 }
 
 // ExchangeContext sends msg to the address specified in addr (without port number).
 func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr string) (rsp *dns.Msg, rtt time.Duration, err error) {
 
 	addr = net.JoinHostPort(addr, c.Port)
-	// use a smaller timeout
-	readCtx, cancelConnect := context.WithTimeout(ctx, c.Timeout)
-	defer cancelConnect()
-	//session, err := quic.DialAddr(readCtx, addr, c.TLSConfig, nil)
-	session, err := quic.DialAddrEarly(readCtx, addr, c.TLSConfig, nil)
 
-	// NOTE: is there a simpler way to detect if a server supports QUIC instead of relying on timeouts?
+	session, err := c.getSession(ctx, addr)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer session.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
+
+	// If anything goes wrong past this point, assume the session is dead and redial next time.
+	fail := func(e error) (*dns.Msg, time.Duration, error) {
+		c.dropSession(session)
+		return nil, 0, e
+	}
+
 	// ref: https://www.rfc-editor.org/rfc/rfc9250.html#name-dns-message-ids
 	msg.Id = 0
 
@@ -48,7 +85,7 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	stream, err := session.OpenStream()
 	//stream, err := session.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, 0, err
+		return fail(err)
 	}
 
 	// Create a buffer for length (2 bytes) + message
@@ -58,7 +95,7 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 
 	// Write in one go
 	if _, err = stream.Write(blen); err != nil {
-		return nil, 0, err
+		return fail(err)
 	}
 
 	// The client MUST send the DNS query over the selected stream, and MUST
@@ -68,7 +105,7 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	// See: https://github.com/AdguardTeam/dnsproxy/blob/f901a5f4b9e8d5f143dce459067bc6614c6d927d/upstream/doq.go#L247-L254
 	err = stream.Close()
 	if err != nil {
-		return nil, 0, fmt.Errorf("unable to close quic stream: %w", err)
+		return fail(fmt.Errorf("unable to close quic stream: %w", err))
 	}
 
 	// Use a separate context with timeout for reading the response
@@ -86,10 +123,12 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 	select {
 	case err := <-errChan:
 		if err != nil {
-			return nil, 0, err
+			return fail(err)
 		}
 	case <-readCtx.Done():
-		return nil, 0, fmt.Errorf("timeout reading response")
+		return fail(fmt.Errorf("timeout reading response"))
+	case <-session.Context().Done():
+		return fail(fmt.Errorf("quic session closed: %w", session.Context().Err()))
 	}
 
 	rtt = time.Since(t)
