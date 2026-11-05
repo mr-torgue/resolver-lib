@@ -22,15 +22,15 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 
 	switch pool.status() {
 	case PrimedButNeedsEnhancing:
-		if !LazyEnrichment {
+		if !config.lazyEnrichment {
 			go func() {
-				enrichPool(ctx, name, pool, exchanger)
+				enrichPool(ctx, name, pool, exchanger, config)
 			}()
 		}
 	case PoolPrimed:
 		// Happy days - nothing to do
 	case PoolHasHostnamesButNoIpAddresses:
-		err := enrichPool(ctx, name, pool, exchanger)
+		err := enrichPool(ctx, name, pool, exchanger, config)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +46,7 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 		config:     config,
 	}
 
-	Log.Debugf("new zone created [%s]", name)
+	config.loggerOrDefault().Debugf("new zone created [%s]", name)
 
 	// TODO: It would be good if we validated, via DNSSEC, nameserver details. Perhaps we could go do this.
 	// And use low TTLs until it's done.
@@ -54,15 +54,16 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 	return z, nil
 }
 
-func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger) error {
-	if len(pool.hostsWithoutAddresses) == 0 {
+func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger, config *Config) error {
+	logger := config.loggerOrDefault()
+
+	hosts := pool.hostnamesWithoutAddresses()
+	if len(hosts) == 0 {
 		return fmt.Errorf("%w [%s]: the nameserver pool is empty so we have no hostnames to enrich", ErrFailedEnrichingPool, zoneName)
 	}
 
-	hosts := pool.hostsWithoutAddresses
-
-	if len(hosts) > DesireNumberOfNameserversPerZone {
-		hosts = hosts[:DesireNumberOfNameserversPerZone]
+	if len(hosts) > config.desireNumberOfNameserversPerZone {
+		hosts = hosts[:config.desireNumberOfNameserversPerZone]
 	}
 
 	types := make([]uint16, 0, 2)
@@ -73,11 +74,18 @@ func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exch
 
 	//---
 
-	done := make(chan bool)
+	// done is buffered so the worker can always send its result and exit,
+	// even if we have already stopped waiting (timeout / cancelled context).
+	done := make(chan bool, 1)
 	go func() {
 		doneCalled := false
 		for _, t := range types {
 			for _, domain := range hosts {
+				// Stop early if the caller is no longer interested.
+				if ctx.Err() != nil {
+					return
+				}
+
 				qmsg := new(dns.Msg)
 				qmsg.SetQuestion(dns.Fqdn(domain), t)
 
@@ -102,11 +110,13 @@ func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exch
 		default:
 			return fmt.Errorf("%w [%s]: the nameserver pool still not primed after enrichment", ErrFailedEnrichingPool, zoneName)
 		}
+	case <-ctx.Done():
+		return fmt.Errorf("%w [%s]: enrichment cancelled: %w", ErrFailedEnrichingPool, zoneName, ctx.Err())
 	case <-time.After(3 * time.Second):
 		return fmt.Errorf("%w [%s]: enrichment timeout", ErrFailedEnrichingPool, zoneName)
 	}
 
-	Log.Debugf("zone pool enriched for [%s]", zoneName)
+	logger.Debugf("zone pool enriched for [%s]", zoneName)
 
 	return nil
 }

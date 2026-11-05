@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/mr-torgue/dns"
 	"github.com/mr-torgue/resolver-lib/dnssec"
@@ -15,12 +14,16 @@ type authenticator struct {
 	ctx  context.Context
 	auth *dnssec.Authenticator
 
-	errors []error
+	// sendMu guards queue, closed and every wg.Add, so wg.Wait in close never
+	// races with an Add. start() drains queue without holding sendMu.
+	sendMu sync.Mutex
+	queue  chan authenticatorInput
+	closed bool
+	wg     sync.WaitGroup
 
-	closeOnce  sync.Once
-	queue      chan authenticatorInput
-	finished   atomic.Bool
-	processing *sync.WaitGroup
+	// errMu guards errors, which start() appends to and result() reads after close().
+	errMu  sync.Mutex
+	errors []error
 }
 
 type authenticatorInput struct {
@@ -28,35 +31,45 @@ type authenticatorInput struct {
 	msg *dns.Msg
 }
 
-func newAuthenticator(ctx context.Context, question dns.Question) *authenticator {
-	a := dnssec.NewAuth(ctx, question)
+func newAuthenticator(ctx context.Context, question dns.Question, config *Config) *authenticator {
+	a := dnssec.NewAuth(ctx, question,
+		dnssec.WithTrustAnchors(config.trustAnchors),
+		dnssec.WithMaxAllowedTTL(config.maxAllowedTTL),
+		dnssec.WithLogger(config.loggerOrDefault()),
+	)
 	auth := &authenticator{
-		ctx:        ctx,
-		auth:       a,
-		errors:     make([]error, 0),
-		queue:      make(chan authenticatorInput, 8),
-		processing: &sync.WaitGroup{},
+		ctx:    ctx,
+		auth:   a,
+		errors: make([]error, 0),
+		queue:  make(chan authenticatorInput, 8),
 	}
 	go auth.start()
 	return auth
 }
 
+// close shuts the queue down (once) and waits until every queued input is processed.
+// It is safe to call multiple times and concurrently with addResponse.
 func (a *authenticator) close() {
-	a.closeOnce.Do(func() {
-		a.finished.Store(true)
-		a.processing.Wait()
+	a.sendMu.Lock()
+	if !a.closed {
+		a.closed = true
 		close(a.queue)
-		a.queue = nil
-	})
+	}
+	a.sendMu.Unlock()
+	a.wg.Wait()
 }
 
 func (a *authenticator) addDelegationSignerLink(z zone, qname string, udpsize uint16) {
-	if a.finished.Load() {
+	a.sendMu.Lock()
+	if a.closed {
+		a.sendMu.Unlock()
 		return
 	}
-	a.processing.Add(1)
+	a.wg.Add(1)
+	a.sendMu.Unlock()
+
 	go func() {
-		defer a.processing.Done()
+		defer a.wg.Done()
 
 		go z.dnskeys(a.ctx)
 
@@ -66,17 +79,18 @@ func (a *authenticator) addDelegationSignerLink(z zone, qname string, udpsize ui
 		dsMsg.RecursionDesired = false
 		response := z.exchange(a.ctx, dsMsg)
 		if !response.IsEmpty() && !response.HasError() {
-			a.processing.Add(1)
-			a.queue <- authenticatorInput{z, response.Msg}
+			_ = a.addResponse(z, response.Msg)
 		}
 	}()
 }
 
 func (a *authenticator) addResponse(z zone, msg *dns.Msg) error {
-	if a.finished.Load() {
+	a.sendMu.Lock()
+	defer a.sendMu.Unlock()
+	if a.closed {
 		return nil
 	}
-	a.processing.Add(1)
+	a.wg.Add(1)
 	a.queue <- authenticatorInput{z, msg}
 	return nil
 }
@@ -85,25 +99,28 @@ func (a *authenticator) start() {
 	for in := range a.queue {
 		err := a.auth.AddResponse(&authZoneWrapper{ctx: a.ctx, zone: in.z}, in.msg)
 		if err != nil {
-			// `Errors` is only accessible from this thread when processing is !Done().
+			a.errMu.Lock()
 			a.errors = append(a.errors, err)
+			a.errMu.Unlock()
 		}
-		a.processing.Done()
+		a.wg.Done()
 	}
 }
 
 func (a *authenticator) result() (dnssec.AuthenticationResult, dnssec.DenialOfExistenceState, error) {
-	a.finished.Store(true)
-	a.processing.Wait()
 	a.close()
 
-	// `Errors` is only accessible from this thread once we've finished Wait().
-	if len(a.errors) > 0 {
-		if len(a.errors) == 1 {
-			return 0, 0, a.errors[0]
+	a.errMu.Lock()
+	errs := make([]error, len(a.errors))
+	copy(errs, a.errors)
+	a.errMu.Unlock()
+
+	if len(errs) > 0 {
+		if len(errs) == 1 {
+			return 0, 0, errs[0]
 		}
 		err := errors.New("multiple errors found: ")
-		for _, e := range a.errors {
+		for _, e := range errs {
 			err = fmt.Errorf("%w: %w", err, e)
 		}
 	}
