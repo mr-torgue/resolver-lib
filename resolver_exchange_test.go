@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"regexp"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -343,7 +342,21 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 
 	// If the total number of request to resolve a query exceeds MaxQueriesPerRequest, we expect an error.
 
-	resolver := getTestResolverWithRoot()
+	// We set maxQueriesPerRequest to 2 on this instance only, so this basic query will exceed it.
+	root := getMockZone(".", "")
+	mzs := mockZoneStore{
+		mockGet: func(name string) zone {
+			return nil
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+	resolver := &Resolver{
+		zones:  mzs,
+		funcs:  resolverFunctions{},
+		config: ConfigBuilder(WithMaxQueriesPerRequest(2)),
+	}
 
 	qmsg := &dns.Msg{}
 	qmsg.SetQuestion("www.example.com.", dns.TypeA)
@@ -356,13 +369,7 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 		return getMockZone("test", ""), nil
 	}
 
-	// We set MaxQueriesPerRequest to 2, so this basic query will exceed it.
-	MaxQueriesPerRequest = 2
-
 	response := resolver.Exchange(context.Background(), qmsg)
-
-	// This is global, so we need to set it back!
-	MaxQueriesPerRequest = DefaultMaxQueriesPerRequest
 
 	assert.True(t, response.HasError())
 	assert.ErrorIs(t, response.Err, ErrMaxQueriesPerRequestReached)
@@ -1065,6 +1072,8 @@ func TestResolver_Exchange_Fallback(t *testing.T) {
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
 	assert.True(t, response.Msg.Truncated)
 
 }
@@ -1077,6 +1086,8 @@ func TestResolver_Cache(t *testing.T) {
 	require.NotNil(t, resolver.config.cache)
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
 	assert.Equal(t, 2, len(response.Msg.Answer))
 	// two ip addresses should be returned, we test for one of them
 	found := false
@@ -1122,6 +1133,9 @@ func TestResolver_Exchange_Real(t *testing.T) {
 	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
 
 	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.Nil(t, response.Err)
+	require.NotNil(t, response.Msg)
 	assert.True(t, response.Msg.AuthenticatedData)
 
 	qmsg = &dns.Msg{}
