@@ -22,15 +22,15 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 
 	switch pool.status() {
 	case PrimedButNeedsEnhancing:
-		if !LazyEnrichment {
+		if !config.lazyEnrichment {
 			go func() {
-				enrichPool(ctx, name, pool, exchanger)
+				enrichPool(ctx, name, pool, exchanger, config)
 			}()
 		}
 	case PoolPrimed:
 		// Happy days - nothing to do
 	case PoolHasHostnamesButNoIpAddresses:
-		err := enrichPool(ctx, name, pool, exchanger)
+		err := enrichPool(ctx, name, pool, exchanger, config)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +46,7 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 		config:     config,
 	}
 
-	Log.Debugf("new zone created [%s]", name)
+	config.loggerOrDefault().Debugf("new zone created [%s]", name)
 
 	// TODO: It would be good if we validated, via DNSSEC, nameserver details. Perhaps we could go do this.
 	// And use low TTLs until it's done.
@@ -54,15 +54,15 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 	return z, nil
 }
 
-func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger) error {
+func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger, config *Config) error {
 	if len(pool.hostsWithoutAddresses) == 0 {
 		return fmt.Errorf("%w [%s]: the nameserver pool is empty so we have no hostnames to enrich", ErrFailedEnrichingPool, zoneName)
 	}
 
 	hosts := pool.hostsWithoutAddresses
 
-	if len(hosts) > DesireNumberOfNameserversPerZone {
-		hosts = hosts[:DesireNumberOfNameserversPerZone]
+	if len(hosts) > config.desireNumberOfNameserversPerZone {
+		hosts = hosts[:config.desireNumberOfNameserversPerZone]
 	}
 
 	types := make([]uint16, 0, 2)
@@ -106,7 +106,7 @@ func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exch
 		return fmt.Errorf("%w [%s]: enrichment timeout", ErrFailedEnrichingPool, zoneName)
 	}
 
-	Log.Debugf("zone pool enriched for [%s]", zoneName)
+	config.loggerOrDefault().Debugf("zone pool enriched for [%s]", zoneName)
 
 	return nil
 }

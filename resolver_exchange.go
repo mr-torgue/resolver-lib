@@ -45,7 +45,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	if !ok {
 		trace = newTraceWithStart(start)
 		ctx = context.WithValue(ctx, CtxTrace, trace)
-		Log.Debugf("New query started with Trace ID: %s", trace.ShortID())
+		resolver.config.loggerOrDefault().Debugf("New query started with Trace ID: %s", trace.ShortID())
 	}
 
 	trace.Iterations.Add(1)
@@ -67,7 +67,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	// If the DO flag is set, we create a DNSSEC Authenticator.
 	var auth *authenticator
 	if isSetDO(qmsg) {
-		auth = newAuthenticator(ctx, qmsg.Question[0])
+		auth = newAuthenticator(ctx, qmsg.Question[0], resolver.config)
 		defer auth.close()
 	}
 
@@ -107,8 +107,8 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	var z zone = knownZones[0]
 
 	for ; d.more(); d.next() {
-		if counter.Add(1) > MaxQueriesPerRequest {
-			return newResponseError(fmt.Errorf("%w. value is currently set to: %d", ErrMaxQueriesPerRequestReached, MaxQueriesPerRequest))
+		if counter.Add(1) > resolver.config.maxQueriesPerRequest {
+			return newResponseError(fmt.Errorf("%w. value is currently set to: %d", ErrMaxQueriesPerRequestReached, resolver.config.maxQueriesPerRequest))
 		}
 
 		c := d.current()
@@ -123,7 +123,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 		z, response = resolver.funcs.resolveLabel(ctx, &d, z, qmsg, auth)
 
 		if response != nil {
-			Log.Debugf("counter at end of exchange for iteration %d is %d", trace.Iterations.Load(), counter.Load())
+			resolver.config.loggerOrDefault().Debugf("counter at end of exchange for iteration %d is %d", trace.Iterations.Load(), counter.Load())
 			return response
 		}
 	}
@@ -258,7 +258,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 	if auth != nil {
 		authTime := time.Now()
 		response.Auth, response.Doe, response.Err = auth.result()
-		Log.Infof("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String())
+		resolver.config.loggerOrDefault().Infof("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String())
 
 		/*
 			   If the resolver accepts the RRset as authentic, the validator MUST
@@ -327,17 +327,17 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 
 	// We'll consider both of these 'normal' responses.
 	if !(response.Msg.Rcode == dns.RcodeSuccess || response.Msg.Rcode == dns.RcodeNameError) {
-		Log.Debugf("unsuccessful response code %s (%d)", RcodeToString(response.Msg.Rcode), response.Msg.Rcode)
+		resolver.config.loggerOrDefault().Debugf("unsuccessful response code %s (%d)", RcodeToString(response.Msg.Rcode), response.Msg.Rcode)
 		response.Err = fmt.Errorf("unsuccessful response code %s (%d)", RcodeToString(response.Msg.Rcode), response.Msg.Rcode)
 	}
 
 	//---
 
-	if RemoveAuthoritySectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
+	if resolver.config.removeAuthoritySectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
 		response.Msg.Ns = []dns.RR{}
 	}
 
-	if RemoveAdditionalSectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
+	if resolver.config.removeAdditionalSectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
 		var opt *dns.OPT
 		for _, extra := range response.Msg.Extra {
 			if r, ok := extra.(*dns.OPT); ok {
@@ -374,7 +374,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 			// If a response is Bogus, we return a Server Failure with all the response removed.
 			if response.Auth == dnssec.Bogus {
 				response.Msg.Rcode = dns.RcodeServerFailure
-				if SuppressBogusResponseSections {
+				if resolver.config.suppressBogusResponseSections {
 					response.Msg.Answer = []dns.RR{}
 					response.Msg.Ns = []dns.RR{}
 					response.Msg.Extra = []dns.RR{}

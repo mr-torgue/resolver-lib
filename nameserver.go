@@ -144,7 +144,7 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 			iteration = trace.Iteration()
 		}
 		// debug query
-		Log.Debugf(
+		nameserver.config.loggerOrDefault().Debugf(
 			"%s-%d: %s taken querying [%s] %s in zone [%s] on %s://%s (%s)",
 			shortId,
 			iteration,

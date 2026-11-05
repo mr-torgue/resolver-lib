@@ -130,7 +130,7 @@ func (a *Authenticator) ResultTTLAnswer(rtype uint16) (uint32, bool) {
 
 	last := a.results[len(a.results)-1]
 
-	return resultTTL(rtype, last.answer)
+	return resultTTL(rtype, last.answer, a.cfg.MaxAllowedTTL)
 }
 
 func (a *Authenticator) ResultTTLAuthority(rtype uint16) (uint32, bool) {
@@ -141,13 +141,13 @@ func (a *Authenticator) ResultTTLAuthority(rtype uint16) (uint32, bool) {
 
 	last := a.results[len(a.results)-1]
 
-	return resultTTL(rtype, last.authority)
+	return resultTTL(rtype, last.authority, a.cfg.MaxAllowedTTL)
 }
 
-func resultTTL(rtype uint16, ss signatures) (uint32, bool) {
+func resultTTL(rtype uint16, ss signatures, maxAllowedTTL uint32) (uint32, bool) {
 
 	found := false
-	ttl := MaxAllowedTTL
+	ttl := maxAllowedTTL
 
 	for _, sig := range ss {
 		if sig.rtype == rtype && sig.verified {
