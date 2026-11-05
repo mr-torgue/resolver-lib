@@ -343,7 +343,21 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 
 	// If the total number of request to resolve a query exceeds MaxQueriesPerRequest, we expect an error.
 
-	resolver := getTestResolverWithRoot()
+	// We set maxQueriesPerRequest to 2 on this instance only, so this basic query will exceed it.
+	root := getMockZone(".", "")
+	mzs := mockZoneStore{
+		mockGet: func(name string) zone {
+			return nil
+		},
+		mockZoneList: func(name string) []zone {
+			return []zone{root}
+		},
+	}
+	resolver := &Resolver{
+		zones:  mzs,
+		funcs:  resolverFunctions{},
+		config: ConfigBuilder(WithMaxQueriesPerRequest(2)),
+	}
 
 	qmsg := &dns.Msg{}
 	qmsg.SetQuestion("www.example.com.", dns.TypeA)
@@ -356,13 +370,7 @@ func TestResolver_Exchange_MaxQueriesPerRequestReached(t *testing.T) {
 		return getMockZone("test", ""), nil
 	}
 
-	// We set MaxQueriesPerRequest to 2, so this basic query will exceed it.
-	MaxQueriesPerRequest = 2
-
 	response := resolver.Exchange(context.Background(), qmsg)
-
-	// This is global, so we need to set it back!
-	MaxQueriesPerRequest = DefaultMaxQueriesPerRequest
 
 	assert.True(t, response.HasError())
 	assert.ErrorIs(t, response.Err, ErrMaxQueriesPerRequestReached)
