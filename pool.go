@@ -118,7 +118,7 @@ func (pool *nameserverPool) status() NameserverPoolStatus {
 	}
 
 	// If there are unknown addresses, and we have less than x IPs, then we want to enrich.
-	if total < DesireNumberOfNameserversPerZone && len(pool.hostsWithoutAddresses) > 0 {
+	if total < pool.config.desireNumberOfNameserversPerZone && len(pool.hostsWithoutAddresses) > 0 {
 		return PrimedButNeedsEnhancing
 	}
 
@@ -128,7 +128,7 @@ func (pool *nameserverPool) status() NameserverPoolStatus {
 func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *nameserverPool {
 	pool := &nameserverPool{config: config}
 
-	var ttl = MaxAllowedTTL
+	var ttl = pool.config.maxAllowedTTL
 	pool.hostsWithoutAddresses = make([]string, 0, len(nameservers))
 
 	for _, rr := range nameservers {
@@ -138,7 +138,7 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 
 		//---
 
-		a, aaaa, minTtlSeen := findAddressesForHostname(hostname, extra)
+		a, aaaa, minTtlSeen := findAddressesForHostname(hostname, extra, pool.config.maxAllowedTTL)
 
 		if len(a) == 0 && len(aaaa) == 0 {
 			pool.hostsWithoutAddresses = append(pool.hostsWithoutAddresses, hostname)
@@ -177,12 +177,12 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 	pool.updating.Lock()
 	defer pool.updating.Unlock()
 
-	var ttl = MaxAllowedTTL
+	var ttl = pool.config.maxAllowedTTL
 	hostnamesStillWithoutAddresses := make([]string, 0, len(pool.hostsWithoutAddresses))
 
 	for _, hostname := range pool.hostsWithoutAddresses {
 
-		a, aaaa, minTtlSeen := findAddressesForHostname(hostname, records)
+		a, aaaa, minTtlSeen := findAddressesForHostname(hostname, records, pool.config.maxAllowedTTL)
 
 		if len(a) == 0 && len(aaaa) == 0 {
 			hostnamesStillWithoutAddresses = append(hostnamesStillWithoutAddresses, hostname)
@@ -224,11 +224,11 @@ func (pool *nameserverPool) updateIPCount() {
 	pool.ipv6Count.Store(uint32(len(pool.ipv6)))
 }
 
-func findAddressesForHostname(hostname string, records []dns.RR) ([]*dns.A, []*dns.AAAA, uint32) {
+func findAddressesForHostname(hostname string, records []dns.RR, maxAllowedTTL uint32) ([]*dns.A, []*dns.AAAA, uint32) {
 	a := make([]*dns.A, 0, len(records))
 	aaaa := make([]*dns.AAAA, 0, len(records))
 
-	var ttl = MaxAllowedTTL
+	var ttl = maxAllowedTTL
 
 	for _, rr := range records {
 		if canonicalName(rr.Header().Name) != hostname {

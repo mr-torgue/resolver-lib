@@ -2,6 +2,7 @@ package dnssec
 
 import (
 	"context"
+
 	"github.com/mr-torgue/dns"
 )
 
@@ -13,13 +14,14 @@ type Zone interface {
 type Authenticator struct {
 	ctx      context.Context
 	question dns.Question
+	cfg      Config
 
 	inputBuffer    []*input
 	inputBufferIdx int
 
 	results []*result
 
-	verify func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error)
+	verify func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, *result, error)
 }
 
 type input struct {
@@ -67,8 +69,8 @@ type signature struct {
 }
 
 type verifier struct {
-	verifyDNSKEYs              func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error)
-	verifyRRSETs               func(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error)
+	verifyDNSKEYs              func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error)
+	verifyRRSETs               func(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error)
 	validateDelegatingResponse func(ctx context.Context, r *result) (AuthenticationResult, error)
 	validatePositiveResponse   func(ctx context.Context, r *result) (AuthenticationResult, error)
 	validateNegativeResponse   func(ctx context.Context, r *result) (AuthenticationResult, error)

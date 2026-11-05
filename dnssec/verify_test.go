@@ -3,9 +3,10 @@ package dnssec
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/mr-torgue/dns"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 var initErr = errors.New("init error")
@@ -17,10 +18,10 @@ const testState = AuthenticationResult(^uint8(0))
 
 func getVerifier() verifier {
 	return verifier{
-		verifyDNSKEYs: func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+		verifyDNSKEYs: func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 			return initState, initErr
 		},
-		verifyRRSETs: func(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error) {
+		verifyRRSETs: func(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 			return initState, initErr
 		},
 		validateDelegatingResponse: func(ctx context.Context, r *result) (AuthenticationResult, error) {
@@ -38,11 +39,11 @@ func getVerifier() verifier {
 func getVerifierWithKeyAndSetResponses() verifier {
 	v := getVerifier()
 
-	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		return Unknown, nil
 	}
 
-	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error) {
+	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		return Unknown, nil
 	}
 
@@ -59,7 +60,7 @@ func TestVerify_VerifyNoDSRecords(t *testing.T) {
 	// When no parent DS records are passed, it's always Insecure.
 	// Note that it's not an error, as we don't assume here that we expected DS records. That's checked in Result().
 
-	state, r, err := getVerifier().verify(ctx, zone, msg, ds)
+	state, r, err := getVerifier().verify(ctx, zone, msg, ds, DefaultRequireAllSignaturesValid)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Equal(t, Insecure, state)
@@ -79,7 +80,7 @@ func TestVerify_VerifyGetDNSKEYRecords(t *testing.T) {
 	// Mock GetDNSKEYRecords() returning this error
 	zone.err = errors.New("test error")
 
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, zone.err)
 	assert.NotNil(t, r)
 	assert.Equal(t, Bogus, state)
@@ -97,13 +98,13 @@ func TestVerify_VerifyGetDNSKEYRecords(t *testing.T) {
 
 	var keysSeen []dns.RR
 	var dsRecordsFromParentSeen []*dns.DS
-	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		keysSeen = keys
 		dsRecordsFromParentSeen = dsRecordsFromParent
 		return testState, testErr
 	}
 
-	_, _, _ = v.verify(ctx, zone, msg, dsSet)
+	_, _, _ = v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.Equal(t, []dns.RR{k}, keysSeen)
 	assert.Equal(t, dsSet, dsRecordsFromParentSeen)
 }
@@ -117,11 +118,11 @@ func TestVerify_VerifyDNSKEYsAndRRSETs(t *testing.T) {
 	dsSet := []*dns.DS{newRR("example.com. 300 IN DS 370 13 2 BE74359954660069D5C63D200C39F5603827D7DD02B56F120EE9F3A8 6764247C").(*dns.DS)}
 
 	// Test that when a state other than Unknown is, that state should be returned to us.
-	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		return testState, nil
 	}
 
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Equal(t, testState, state)
@@ -129,11 +130,11 @@ func TestVerify_VerifyDNSKEYsAndRRSETs(t *testing.T) {
 	//---
 
 	// Test that when Unknown and an error is returned, that error should be returned to us.
-	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		return Unknown, testErr
 	}
 
-	state, r, err = v.verify(ctx, zone, msg, dsSet)
+	state, r, err = v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, testErr)
 	assert.NotNil(t, r)
 	assert.Equal(t, Unknown, state)
@@ -141,17 +142,17 @@ func TestVerify_VerifyDNSKEYsAndRRSETs(t *testing.T) {
 	//---
 
 	// When Unknown/nil is returned, we expect verifyRRSETs() to then be called.
-	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS) (AuthenticationResult, error) {
+	v.verifyDNSKEYs = func(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		return Unknown, nil
 	}
 
 	called := false
-	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error) {
+	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		called = true
 		return testState, nil
 	}
 
-	state, r, err = v.verify(ctx, zone, msg, dsSet)
+	state, r, err = v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Equal(t, testState, state)
@@ -160,12 +161,12 @@ func TestVerify_VerifyDNSKEYsAndRRSETs(t *testing.T) {
 	//---
 
 	// If Unknown and an error is returned, we should get those values back.
-	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error) {
+	v.verifyRRSETs = func(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 		called = true
 		return Unknown, testErr
 	}
 
-	state, r, err = v.verify(ctx, zone, msg, dsSet)
+	state, r, err = v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, testErr)
 	assert.NotNil(t, r)
 	assert.Equal(t, Unknown, state)
@@ -179,7 +180,7 @@ func TestVerify_VerifyFailsafe(t *testing.T) {
 	dsSet := []*dns.DS{newRR("example.com. 300 IN DS 370 13 2 BE74359954660069D5C63D200C39F5603827D7DD02B56F120EE9F3A8 6764247C").(*dns.DS)}
 
 	// With no answers or authority set, we expect a Bogus Result
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, ErrFailsafeResponse)
 	assert.NotNil(t, r)
 	assert.Equal(t, Bogus, state)
@@ -202,7 +203,7 @@ func TestVerify_VerifyDelegatingResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, testErr)
 	assert.NotNil(t, r)
 	assert.Equal(t, testState, state)
@@ -223,7 +224,7 @@ func TestVerify_VerifyDelegatingResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	v.verify(ctx, zone, msg, dsSet)
+	v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.False(t, called)
 
 	//---
@@ -239,7 +240,7 @@ func TestVerify_VerifyDelegatingResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	v.verify(ctx, zone, msg, dsSet)
+	v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.False(t, called)
 
 }
@@ -263,7 +264,7 @@ func TestVerify_VerifyPositiveResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, testErr)
 	assert.NotNil(t, r)
 	assert.Equal(t, testState, state)
@@ -282,7 +283,7 @@ func TestVerify_VerifyPositiveResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	v.verify(ctx, zone, msg, dsSet)
+	v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.False(t, called)
 
 	//---
@@ -298,7 +299,7 @@ func TestVerify_VerifyPositiveResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	v.verify(ctx, zone, msg, dsSet)
+	v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.False(t, called)
 
 	//---
@@ -314,7 +315,7 @@ func TestVerify_VerifyPositiveResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	v.verify(ctx, zone, msg, dsSet)
+	v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.False(t, called)
 
 }
@@ -336,7 +337,7 @@ func TestVerify_VerifyNegativeResponse(t *testing.T) {
 		return testState, testErr
 	}
 
-	state, r, err := v.verify(ctx, zone, msg, dsSet)
+	state, r, err := v.verify(ctx, zone, msg, dsSet, DefaultRequireAllSignaturesValid)
 	assert.ErrorIs(t, err, testErr)
 	assert.NotNil(t, r)
 	assert.Equal(t, testState, state)

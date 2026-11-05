@@ -22,15 +22,15 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 
 	switch pool.status() {
 	case PrimedButNeedsEnhancing:
-		if !LazyEnrichment {
+		if !config.lazyEnrichment {
 			go func() {
-				enrichPool(ctx, name, pool, exchanger)
+				enrichPool(ctx, name, pool, exchanger, config)
 			}()
 		}
 	case PoolPrimed:
 		// Happy days - nothing to do
 	case PoolHasHostnamesButNoIpAddresses:
-		err := enrichPool(ctx, name, pool, exchanger)
+		err := enrichPool(ctx, name, pool, exchanger, config)
 		if err != nil {
 			return nil, err
 		}
@@ -54,15 +54,17 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 	return z, nil
 }
 
-func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger) error {
-	if len(pool.hostsWithoutAddresses) == 0 {
+func enrichPool(ctx context.Context, zoneName string, pool *nameserverPool, exchanger exchanger, config *Config) error {
+
+	pool.updating.RLock()
+	hosts := pool.hostsWithoutAddresses
+	pool.updating.RUnlock()
+	if len(hosts) == 0 {
 		return fmt.Errorf("%w [%s]: the nameserver pool is empty so we have no hostnames to enrich", ErrFailedEnrichingPool, zoneName)
 	}
 
-	hosts := pool.hostsWithoutAddresses
-
-	if len(hosts) > DesireNumberOfNameserversPerZone {
-		hosts = hosts[:DesireNumberOfNameserversPerZone]
+	if len(hosts) > config.desireNumberOfNameserversPerZone {
+		hosts = hosts[:config.desireNumberOfNameserversPerZone]
 	}
 
 	types := make([]uint16, 0, 2)

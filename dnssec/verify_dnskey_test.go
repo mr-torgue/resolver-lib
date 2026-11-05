@@ -3,8 +3,9 @@ package dnssec
 import (
 	"context"
 	"errors"
-	"github.com/mr-torgue/dns"
 	"testing"
+
+	"github.com/mr-torgue/dns"
 )
 
 func TestVerify_DNSKEYs(t *testing.T) {
@@ -24,7 +25,7 @@ func TestVerify_DNSKEYs(t *testing.T) {
 	keys := []dns.RR{}
 	dsRecordsFromParent := []*dns.DS{}
 
-	state, err := verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	state, err := verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, DefaultRequireAllSignaturesValid)
 	if err == nil {
 		t.Errorf("verifyDNSKEYs returned no error. expected ErrKeysNotFound")
 	}
@@ -43,7 +44,7 @@ func TestVerify_DNSKEYs(t *testing.T) {
 		newRR("example.com. 54775 IN DS 370 13 2 BE74359954660069D5C63D200C39F5603827D7DD02B56F120EE9F3A8 6764247C").(*dns.DS),
 	}
 
-	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, DefaultRequireAllSignaturesValid)
 	if err == nil {
 		t.Errorf("verifyDNSKEYs returned no error. expected ErrKeysNotFound")
 	}
@@ -59,7 +60,7 @@ func TestVerify_DNSKEYs(t *testing.T) {
 	dsRecordsFromParent = []*dns.DS{k.ds}
 
 	// This should now be valid
-	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}
@@ -77,7 +78,7 @@ func TestVerify_DNSKEYs(t *testing.T) {
 	keys = append(keys, k.sign(keys, 0, 0))
 
 	// This should now be valid
-	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, DefaultRequireAllSignaturesValid)
 	if err != nil {
 		t.Errorf("verifyDNSKEYs returned unexpected error: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestVerify_DNSKEYs(t *testing.T) {
 	keys[1].(*dns.RRSIG).Labels = 0
 
 	// This should now be valid
-	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	state, err = verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}

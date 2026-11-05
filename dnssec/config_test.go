@@ -7,6 +7,7 @@ import (
 	"github.com/mr-torgue/dns"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoadAnchors(t *testing.T) {
@@ -46,18 +47,19 @@ func TestLoadAnchors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dnssec.LoadAnchors(tt.anchorfile)
-			assert.Equal(t, len(tt.expectedAnswer), len(dnssec.RootTrustAnchors), "lengths of DS records should be equal")
+			anchors, err := dnssec.ParseAnchors(tt.anchorfile)
+			require.Nil(t, err)
+			require.NotNil(t, anchors)
+			assert.Equal(t, len(tt.expectedAnswer), len(anchors), "lengths of DS records should be equal")
 			for i := range tt.expectedAnswer {
-				assert.Equal(t, tt.expectedAnswer[i].Digest, dnssec.RootTrustAnchors[i].Digest, "Digest should match")
-				assert.Equal(t, tt.expectedAnswer[i].Hdr.Rrtype, dnssec.RootTrustAnchors[i].Hdr.Rrtype, "RR types should match")
-				assert.Equal(t, tt.expectedAnswer[i].Algorithm, dnssec.RootTrustAnchors[i].Algorithm, "Algorithm should match")
-				assert.Equal(t, tt.expectedAnswer[i].DigestType, dnssec.RootTrustAnchors[i].DigestType, "DigestType should match")
-				assert.Equal(t, tt.expectedAnswer[i].KeyTag, dnssec.RootTrustAnchors[i].KeyTag, "KeyTag should match")
-				assert.Equal(t, tt.expectedAnswer[i].Hdr.Ttl, dnssec.RootTrustAnchors[i].Hdr.Ttl, "TTL should match")
+				assert.Equal(t, tt.expectedAnswer[i].Digest, anchors[i].Digest, "Digest should match")
+				assert.Equal(t, tt.expectedAnswer[i].Hdr.Rrtype, anchors[i].Hdr.Rrtype, "RR types should match")
+				assert.Equal(t, tt.expectedAnswer[i].Algorithm, anchors[i].Algorithm, "Algorithm should match")
+				assert.Equal(t, tt.expectedAnswer[i].DigestType, anchors[i].DigestType, "DigestType should match")
+				assert.Equal(t, tt.expectedAnswer[i].KeyTag, anchors[i].KeyTag, "KeyTag should match")
+				assert.Equal(t, tt.expectedAnswer[i].Hdr.Ttl, anchors[i].Hdr.Ttl, "TTL should match")
 
 			}
 		})
 	}
-	assert.NotNil(t, dnssec.RootTrustAnchors, "RootTrustAnchors should not be nil")
 }

@@ -118,7 +118,7 @@ func TestFindAddressesForHostname_BasicFunctionality(t *testing.T) {
 		&dns.A{Hdr: dns.RR_Header{Name: hostname, Ttl: 300}, A: net.IP{192, 0, 2, 1}},
 		&dns.AAAA{Hdr: dns.RR_Header{Name: hostname, Ttl: 200}, AAAA: net.IP{32, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}},
 	}
-	a, aaaa, ttl := findAddressesForHostname(hostname, records)
+	a, aaaa, ttl := findAddressesForHostname(hostname, records, DefaultMaxAllowedTTL)
 
 	assert.Equal(t, []*dns.A{records[0].(*dns.A)}, a)
 	assert.Equal(t, []*dns.AAAA{records[1].(*dns.AAAA)}, aaaa)
@@ -127,11 +127,11 @@ func TestFindAddressesForHostname_BasicFunctionality(t *testing.T) {
 
 func TestFindAddressesForHostname_EmptyInput(t *testing.T) {
 	hostname := "example.com."
-	a, aaaa, ttl := findAddressesForHostname(hostname, []dns.RR{})
+	a, aaaa, ttl := findAddressesForHostname(hostname, []dns.RR{}, DefaultMaxAllowedTTL)
 
 	assert.Len(t, a, 0)
 	assert.Len(t, aaaa, 0)
-	assert.Equal(t, MaxAllowedTTL, ttl)
+	assert.Equal(t, DefaultMaxAllowedTTL, ttl)
 }
 
 func TestFindAddressesForHostname_MixedRecords(t *testing.T) {
@@ -140,7 +140,7 @@ func TestFindAddressesForHostname_MixedRecords(t *testing.T) {
 		&dns.A{Hdr: dns.RR_Header{Name: hostname, Ttl: 300}, A: net.IP{192, 0, 2, 1}},
 		&dns.TXT{Hdr: dns.RR_Header{Name: "unrelated.com.", Ttl: 100}},
 	}
-	a, aaaa, ttl := findAddressesForHostname(hostname, records)
+	a, aaaa, ttl := findAddressesForHostname(hostname, records, DefaultMaxAllowedTTL)
 
 	assert.Len(t, a, 1)
 	assert.Len(t, aaaa, 0)
@@ -153,7 +153,7 @@ func TestFindAddressesForHostname_MinimumTTLCalculation(t *testing.T) {
 		&dns.A{Hdr: dns.RR_Header{Name: hostname, Ttl: 300}, A: net.IP{192, 0, 2, 1}},
 		&dns.A{Hdr: dns.RR_Header{Name: hostname, Ttl: 100}, A: net.IP{192, 0, 2, 2}},
 	}
-	_, _, ttl := findAddressesForHostname(hostname, records)
+	_, _, ttl := findAddressesForHostname(hostname, records, DefaultMaxAllowedTTL)
 
 	assert.Equal(t, uint32(100), ttl)
 }
@@ -163,7 +163,7 @@ func TestFindAddressesForHostname_CaseInsensitivity(t *testing.T) {
 	records := []dns.RR{
 		&dns.A{Hdr: dns.RR_Header{Name: "Example.Com.", Ttl: 200}, A: net.IP{192, 0, 2, 1}},
 	}
-	a, _, _ := findAddressesForHostname(hostname, records)
+	a, _, _ := findAddressesForHostname(hostname, records, DefaultMaxAllowedTTL)
 
 	assert.Len(t, a, 1)
 }

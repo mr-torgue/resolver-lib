@@ -67,7 +67,7 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	// If the DO flag is set, we create a DNSSEC Authenticator.
 	var auth *authenticator
 	if isSetDO(qmsg) {
-		auth = newAuthenticator(ctx, qmsg.Question[0])
+		auth = newAuthenticator(ctx, qmsg.Question[0], resolver.config)
 		defer auth.close()
 	}
 
@@ -107,8 +107,8 @@ func (resolver *Resolver) exchange(ctx context.Context, qmsg *dns.Msg) *Response
 	var z zone = knownZones[0]
 
 	for ; d.more(); d.next() {
-		if counter.Add(1) > MaxQueriesPerRequest {
-			return newResponseError(fmt.Errorf("%w. value is currently set to: %d", ErrMaxQueriesPerRequestReached, MaxQueriesPerRequest))
+		if counter.Add(1) > resolver.config.maxQueriesPerRequest {
+			return newResponseError(fmt.Errorf("%w. value is currently set to: %d", ErrMaxQueriesPerRequestReached, resolver.config.maxQueriesPerRequest))
 		}
 
 		c := d.current()
@@ -333,11 +333,11 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 
 	//---
 
-	if RemoveAuthoritySectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
+	if resolver.config.removeAuthoritySectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
 		response.Msg.Ns = []dns.RR{}
 	}
 
-	if RemoveAdditionalSectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
+	if resolver.config.removeAdditionalSectionForPositiveAnswers && len(response.Msg.Answer) > 0 && !recordsOfTypeExist(response.Msg.Ns, dns.TypeSOA) {
 		var opt *dns.OPT
 		for _, extra := range response.Msg.Extra {
 			if r, ok := extra.(*dns.OPT); ok {
@@ -374,7 +374,7 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 			// If a response is Bogus, we return a Server Failure with all the response removed.
 			if response.Auth == dnssec.Bogus {
 				response.Msg.Rcode = dns.RcodeServerFailure
-				if SuppressBogusResponseSections {
+				if resolver.config.suppressBogusResponseSections {
 					response.Msg.Answer = []dns.RR{}
 					response.Msg.Ns = []dns.RR{}
 					response.Msg.Extra = []dns.RR{}

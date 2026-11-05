@@ -8,7 +8,15 @@ import (
 	"github.com/mr-torgue/dns"
 )
 
-func NewAuth(ctx context.Context, question dns.Question) *Authenticator {
+func NewAuth(ctx context.Context, question dns.Question, opts ...Option) *Authenticator {
+	cfg := DefaultConfig()
+	for _, o := range opts {
+		o(&cfg)
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = Log
+	}
+
 	// Function map. Allows overriding for testing.
 	v := &verifier{
 		verifyDNSKEYs:              verifyDNSKEYs,
@@ -27,6 +35,7 @@ func NewAuth(ctx context.Context, question dns.Question) *Authenticator {
 	return &Authenticator{
 		ctx:         ctx,
 		question:    question,
+		cfg:         cfg,
 		inputBuffer: make([]*input, maxExpectedItems),
 		results:     make([]*result, 0, maxExpectedItems),
 		verify:      v.verify,
@@ -90,7 +99,7 @@ func (a *Authenticator) processResponse(zone Zone, msg *dns.Msg) error {
 
 	var last *result
 	if len(a.results) == 0 {
-		last = &result{dsRecords: RootTrustAnchors}
+		last = &result{dsRecords: a.cfg.TrustAnchors}
 	} else {
 		last = a.results[len(a.results)-1]
 
@@ -137,7 +146,7 @@ func (a *Authenticator) processResponse(zone Zone, msg *dns.Msg) error {
 		}
 	}
 
-	state, r, err := a.verify(a.ctx, zone, msg, last.dsRecords)
+	state, r, err := a.verify(a.ctx, zone, msg, last.dsRecords, a.cfg.RequireAllSignaturesValid)
 
 	if err != nil {
 		// Any errors here are for debugging only.

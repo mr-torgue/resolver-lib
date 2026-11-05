@@ -3,8 +3,9 @@ package dnssec
 import (
 	"context"
 	"errors"
-	"github.com/mr-torgue/dns"
 	"testing"
+
+	"github.com/mr-torgue/dns"
 )
 
 func TestVerify_RRSETs(t *testing.T) {
@@ -29,7 +30,7 @@ func TestVerify_RRSETs(t *testing.T) {
 
 	// With no signatures passed, we expect a Bogus result, with ErrSignatureSetEmpty.
 
-	state, err := verifyRRSETs(ctx, r, keys)
+	state, err := verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}
@@ -50,7 +51,7 @@ func TestVerify_RRSETs(t *testing.T) {
 
 	rrset = append(rrset, key.sign(rrset, 0, 0))
 	r.msg.Answer = rrset
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if err != nil {
 		t.Errorf("verifyRRSETs returned unexpected error: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestVerify_RRSETs(t *testing.T) {
 	r.msg.Answer = []dns.RR{}
 	r.msg.Ns = rrset
 
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if err != nil {
 		t.Errorf("verifyRRSETs returned unexpected error: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestVerify_RRSETs(t *testing.T) {
 	r.msg.Answer = rrset
 	r.msg.Ns = []dns.RR{}
 
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}
@@ -106,7 +107,7 @@ func TestVerify_RRSETs(t *testing.T) {
 	r.msg.Answer = []dns.RR{}
 	r.msg.Ns = rrset
 
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}
@@ -124,7 +125,7 @@ func TestVerify_RRSETs(t *testing.T) {
 	r.msg.Answer = []dns.RR{rrset[0]}
 	r.msg.Ns = []dns.RR{}
 
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}
@@ -142,7 +143,7 @@ func TestVerify_RRSETs(t *testing.T) {
 	r.msg.Answer = []dns.RR{}
 	r.msg.Ns = []dns.RR{rrset[0]}
 
-	state, err = verifyRRSETs(ctx, r, keys)
+	state, err = verifyRRSETs(ctx, r, keys, DefaultRequireAllSignaturesValid)
 	if !errors.Is(err, ErrBogusResultFound) {
 		t.Errorf("verifyDNSKEYs returned unexpected error. expected ErrBogusResultFound, got %v", err)
 	}

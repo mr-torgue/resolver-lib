@@ -3,9 +3,10 @@ package dnssec
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/mr-torgue/dns"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestAuthenticator_AddNotSubdomain(t *testing.T) {
@@ -73,7 +74,7 @@ func TestAuthenticator_ProcessWithNoExpectedErrors(t *testing.T) {
 	// Test secure with no error.
 
 	a := NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Secure, &result{}, nil
 	}
 
@@ -91,7 +92,7 @@ func TestAuthenticator_ProcessWithNoExpectedErrors(t *testing.T) {
 	// Test Insecure with no error.
 
 	a = NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Insecure, &result{}, nil
 	}
 
@@ -108,7 +109,7 @@ func TestAuthenticator_ProcessWithNoExpectedErrors(t *testing.T) {
 	// If the state is unknown, we fail-safe to Bogus.
 
 	a = NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Unknown, &result{}, nil
 	}
 
@@ -130,7 +131,7 @@ func TestAuthenticator_ProcessWithExpectedErrors(t *testing.T) {
 	expected := errors.New("mock error")
 
 	a := NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Secure, &result{}, expected
 	}
 
@@ -147,7 +148,7 @@ func TestAuthenticator_ProcessWithExpectedErrors(t *testing.T) {
 	// If a nil result is returned, something unexpected has happened.
 
 	a = NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Secure, nil, nil
 	}
 
@@ -164,7 +165,7 @@ func TestAuthenticator_MissingDSRecordError(t *testing.T) {
 
 	q := dns.Question{Name: "test.example.com.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
 	a := NewAuth(context.Background(), q)
-	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+	a.verify = func(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, RequireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 		return Secure, &result{}, nil
 	}
 

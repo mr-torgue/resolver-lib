@@ -2,6 +2,7 @@ package dnssec
 
 import (
 	"fmt"
+
 	"github.com/mr-torgue/dns"
 )
 
@@ -31,8 +32,8 @@ func (ss signatures) countNameTypeCombinations() int {
 }
 
 // Verify calls one of two local policy strategies for determining if the response is verified.
-func (ss signatures) Verify() error {
-	if RequireAllSignaturesValid {
+func (ss signatures) Verify(requireAllSignaturesValid bool) error {
+	if requireAllSignaturesValid {
 		return ss.verifyAllRRSigsPerRRSet()
 	}
 	return ss.verifyOneOrMoreRRSigPerRRSet()
@@ -146,8 +147,8 @@ func (ss signatures) verifyAllRRSigsPerRRSet() error {
 }
 
 // Valid returns if all signatures in the have been successfully verified.
-func (ss signatures) Valid() bool {
-	return ss.Verify() == nil
+func (ss signatures) Valid(requireAllSignaturesValid bool) bool {
+	return ss.Verify(requireAllSignaturesValid) == nil
 }
 
 // extractDSRecords returns all DS records from signatures with a rrtype of DS.

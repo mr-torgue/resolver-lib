@@ -2,10 +2,11 @@ package dnssec
 
 import (
 	"context"
+
 	"github.com/mr-torgue/dns"
 )
 
-func (v verifier) verify(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS) (AuthenticationResult, *result, error) {
+func (v verifier) verify(ctx context.Context, zone Zone, msg *dns.Msg, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, *result, error) {
 	r := &result{
 		name: zone.Name(),
 		zone: zone,
@@ -30,12 +31,12 @@ func (v verifier) verify(ctx context.Context, zone Zone, msg *dns.Msg, dsRecords
 		return Bogus, r, err
 	}
 
-	status, err = v.verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent)
+	status, err = v.verifyDNSKEYs(ctx, r, keys, dsRecordsFromParent, requireAllSignaturesValid)
 	if status != Unknown || err != nil {
 		return status, r, err
 	}
 
-	status, err = v.verifyRRSETs(ctx, r, extractRecords[*dns.DNSKEY](keys))
+	status, err = v.verifyRRSETs(ctx, r, extractRecords[*dns.DNSKEY](keys), requireAllSignaturesValid)
 	if status != Unknown || err != nil {
 		return status, r, err
 	}

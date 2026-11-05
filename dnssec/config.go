@@ -2,6 +2,7 @@ package dnssec
 
 import (
 	"encoding/xml"
+	"fmt"
 	"os"
 	"time"
 
@@ -15,37 +16,64 @@ const (
 	DefaultMaxAllowedTTL = uint32(60 * 60 * 48) // 48 Hours
 )
 
-var (
-	RootTrustAnchors []*dns.DS
-	//RootTrustAnchors = anchors.GetValid()
-
-	// RequireAllSignaturesValid
-	// If false (default), then one or more RRSIG per RRSET must be valid for the overall state to be valid.
-	// If true, _all_ RRSIGs returned must be valid for the overall state to be valid.
-	//
-	// Note:
-	//  https://datatracker.ietf.org/doc/html/rfc4035#section-5.3.3
-	//	If other RRSIG RRs also cover this RRset, the local resolver security
-	//	policy determines whether the resolver also has to test these RRSIG
-	//	RRs and how to resolve conflicts if these RRSIG RRs lead to differing
-	//	results.
-	RequireAllSignaturesValid = DefaultRequireAllSignaturesValid
-
-	// MaxAllowedTTL define the maximum TTL that we'll calculate for any record. This overrides any TTLs set by records
-	// we receive. Shorter TTLs on received records will still be respected.
-	MaxAllowedTTL = DefaultMaxAllowedTTL
-)
-
-// Log is the package-level logger. It defaults to doing nothing.
+// Log is the package-level default logger. It defaults to doing nothing.
 var Log log.Logger = log.NopLogger{}
 
-// SetLogger allows external users to override the package logger.
+// SetLogger allows external users to override the package-level default logger.
+// It only affects Authenticator instances created afterwards.
 func SetLogger(l log.Logger) {
 	if l == nil {
 		Log = log.NopLogger{}
 		return
 	}
 	Log = l
+}
+
+// Config holds the per-instance configuration of an Authenticator.
+type Config struct {
+	TrustAnchors              []*dns.DS
+	MaxAllowedTTL             uint32
+	RequireAllSignaturesValid bool
+	Logger                    log.Logger
+}
+
+// DefaultConfig returns a Config populated from the package-level defaults.
+func DefaultConfig() Config {
+	return Config{
+		TrustAnchors:              []*dns.DS{},
+		MaxAllowedTTL:             DefaultMaxAllowedTTL,
+		RequireAllSignaturesValid: DefaultRequireAllSignaturesValid,
+		Logger:                    Log,
+	}
+}
+
+// Option customises an Authenticator's Config.
+type Option func(*Config)
+
+// WithTrustAnchors sets the trust anchors used to start the chain of trust.
+func WithTrustAnchors(anchors []*dns.DS) Option {
+	return func(c *Config) { c.TrustAnchors = anchors }
+}
+
+// WithMaxAllowedTTL sets the maximum TTL calculated for any record.
+func WithMaxAllowedTTL(ttl uint32) Option {
+	return func(c *Config) { c.MaxAllowedTTL = ttl }
+}
+
+// WithRequireAllSignaturesValid sets the signature validation policy.
+func WithRequireAllSignaturesValid(requireAll bool) Option {
+	return func(c *Config) { c.RequireAllSignaturesValid = requireAll }
+}
+
+// WithLogger sets the logger for this instance.
+func WithLogger(l log.Logger) Option {
+	return func(c *Config) {
+		if l == nil {
+			c.Logger = log.NopLogger{}
+			return
+		}
+		c.Logger = l
+	}
 }
 
 // TrustAnchor represents the root XML element.
@@ -68,20 +96,21 @@ type KeyDigest struct {
 	Digest     string    `xml:"Digest"`
 }
 
-// LoadAnchors loads an anchor file into RootTrustAnchors.
-// Panics if it could not be found or was not parsed correctly.
-func LoadAnchors(anchorfile string) {
+// ParseAnchors loads an anchor file and returns the valid trust anchors.
+// Unlike LoadAnchors it does not touch any package-level state, so it is safe
+// to call concurrently for independent instances.
+func ParseAnchors(anchorfile string) ([]*dns.DS, error) {
 	f, err := os.Open(anchorfile)
 	if err != nil {
-		panic("Root anchors file not found")
+		return nil, fmt.Errorf("root anchors file not found: %w", err)
 	}
 	defer f.Close()
-	// empty
-	RootTrustAnchors = []*dns.DS{}
+
+	anchors := []*dns.DS{}
 
 	var ta TrustAnchor
 	if err := xml.NewDecoder(f).Decode(&ta); err != nil {
-		panic("Failed to decode root anchors")
+		return nil, fmt.Errorf("failed to decode root anchors: %w", err)
 	}
 
 	for _, kd := range ta.KeyDigests {
@@ -110,6 +139,8 @@ func LoadAnchors(anchorfile string) {
 			DigestType: kd.DigestType,
 			Digest:     kd.Digest,
 		}
-		RootTrustAnchors = append(RootTrustAnchors, ds)
+		anchors = append(anchors, ds)
 	}
+
+	return anchors, nil
 }

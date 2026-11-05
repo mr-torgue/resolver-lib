@@ -13,6 +13,7 @@ import (
 )
 
 func TestAuthenticate_ValidRSA(t *testing.T) {
+	cfg := DefaultConfig()
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
 		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
@@ -31,11 +32,11 @@ func TestAuthenticate_ValidRSA(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -45,6 +46,7 @@ func TestAuthenticate_ValidRSA(t *testing.T) {
 }
 
 func TestAuthenticate_ValidFALCON1024(t *testing.T) {
+	cfg := DefaultConfig()
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
 		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
@@ -63,11 +65,11 @@ func TestAuthenticate_ValidFALCON1024(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -77,6 +79,7 @@ func TestAuthenticate_ValidFALCON1024(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
+	cfg := DefaultConfig()
 	assert.Panics(t, func() { testKeyWithAlgorithm(37) }) // note if we every use 32, this will not be asserted
 
 	rrset := []dns.RR{
@@ -105,11 +108,11 @@ func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err == nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err == nil {
 		t.Errorf("expected Verify() to fail: %s", err.Error())
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to be not valid")
 	}
 
@@ -119,6 +122,7 @@ func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
 }
 
 func TestAuthenticate_ValidSECDSA(t *testing.T) {
+	cfg := DefaultConfig()
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
 		newRR("example.com. 3600 IN MX 10 mx2.example.com."),
@@ -137,11 +141,11 @@ func TestAuthenticate_ValidSECDSA(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -151,6 +155,7 @@ func TestAuthenticate_ValidSECDSA(t *testing.T) {
 }
 
 func TestAuthenticate_ValidWithTwoKeysAndTwoRRSets(t *testing.T) {
+	cfg := DefaultConfig()
 	// We pass two different RRSETs, signed by two different DNSKEYs.
 
 	rrset1 := []dns.RR{
@@ -176,16 +181,17 @@ func TestAuthenticate_ValidWithTwoKeysAndTwoRRSets(t *testing.T) {
 		t.Errorf("expected length of set to be 2, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 }
 
 func TestAuthenticate_ValidWildcard(t *testing.T) {
+	cfg := DefaultConfig()
 	rrset := []dns.RR{newRR("*.example.com. 3600 IN A 192.0.2.53")}
 	key := testEcKey()
 
@@ -204,11 +210,11 @@ func TestAuthenticate_ValidWildcard(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -218,6 +224,7 @@ func TestAuthenticate_ValidWildcard(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidSignature(t *testing.T) {
+	cfg := DefaultConfig()
 	rr, _ := newRR("example.com. 3600 IN MX 10 mx1.example.com.").(*dns.MX)
 	rrset := []dns.RR{rr}
 
@@ -237,11 +244,11 @@ func TestAuthenticate_InvalidSignature(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -256,6 +263,7 @@ func TestAuthenticate_InvalidSignature(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidTimePeriod(t *testing.T) {
+	cfg := DefaultConfig()
 	rr, _ := newRR("example.com. 3600 IN MX 10 mx1.example.com.").(*dns.MX)
 	rrset := []dns.RR{rr}
 
@@ -277,11 +285,11 @@ func TestAuthenticate_InvalidTimePeriod(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -310,11 +318,11 @@ func TestAuthenticate_InvalidTimePeriod(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -329,6 +337,7 @@ func TestAuthenticate_InvalidTimePeriod(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidSignerName(t *testing.T) {
+	cfg := DefaultConfig()
 	rrset := []dns.RR{newRR("example.com. 3600 IN MX 10 mx1.example.com.")}
 
 	key := testEcKey()
@@ -345,11 +354,11 @@ func TestAuthenticate_InvalidSignerName(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -364,6 +373,7 @@ func TestAuthenticate_InvalidSignerName(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidLabelCount(t *testing.T) {
+	cfg := DefaultConfig()
 	// The number of labels in the owner name cannot be less than the RRSIG's label value.
 
 	// We'll add some labels temporarily so the label value in the RRSIG is high.
@@ -387,11 +397,11 @@ func TestAuthenticate_InvalidLabelCount(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -406,6 +416,7 @@ func TestAuthenticate_InvalidLabelCount(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidWithMultipleErrors(t *testing.T) {
+	cfg := DefaultConfig()
 	// Both RRSIGs will be invalid
 
 	rrset1 := []dns.RR{
@@ -438,11 +449,11 @@ func TestAuthenticate_InvalidWithMultipleErrors(t *testing.T) {
 		t.Errorf("expected length of set to be 2, but got %d", len(set))
 	}
 
-	if valid := set.Valid(); valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); valid {
 		t.Error("expected set to not be valid")
 	}
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	if err == nil {
 		t.Error("expected error but not found")
 	}
@@ -457,6 +468,7 @@ func TestAuthenticate_InvalidWithMultipleErrors(t *testing.T) {
 }
 
 func TestAuthenticate_ValidWithManyClashingKeys(t *testing.T) {
+	cfg := DefaultConfig()
 	// These keys are deliberately committed for testing purposes.
 	// They all have the identical Flags, Protocol, Algorithm *and Tag*.
 	//
@@ -522,11 +534,11 @@ PrivateKey: ho9mEVla4jjpbC5DoebVqsmvqWtFc074kENkCW86gPg=`,
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -542,6 +554,7 @@ PrivateKey: ho9mEVla4jjpbC5DoebVqsmvqWtFc074kENkCW86gPg=`,
 }
 
 func TestAuthenticate_ValidWithUnsignedNSRecords(t *testing.T) {
+	cfg := DefaultConfig()
 	// When authenticating the authority section at the point of a delegation, we don't
 	// always expect the NS records to be signed, but the DS records should be.
 	// Note that DS records not being signed is optional - they _can_ be signed.
@@ -568,11 +581,11 @@ func TestAuthenticate_ValidWithUnsignedNSRecords(t *testing.T) {
 		t.Errorf("expected length of set to be 1, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -592,6 +605,7 @@ func TestAuthenticate_ValidWithUnsignedNSRecords(t *testing.T) {
 }
 
 func TestAuthenticate_ValidWithSignedNSRecords(t *testing.T) {
+	cfg := DefaultConfig()
 	// Test the edge case where NS records in the authority section are signed.
 	// For example: dig @l.gtld-servers.net. naughty-nameserver.com. DS +dnssec
 
@@ -617,11 +631,11 @@ func TestAuthenticate_ValidWithSignedNSRecords(t *testing.T) {
 		t.Errorf("expected length of set to be 2, but got %d", len(set))
 	}
 
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(cfg.RequireAllSignaturesValid); err != nil {
 		t.Errorf("unexpected error when calling Verify(): %s", err.Error())
 	}
 
-	if valid := set.Valid(); !valid {
+	if valid := set.Valid(cfg.RequireAllSignaturesValid); !valid {
 		t.Error("expected set to be valid")
 	}
 
@@ -651,6 +665,7 @@ func TestAuthenticate_ValidWithMultipleRRSigsForSameRRSet(t *testing.T) {
 		glb.nist.gov.		86400	IN	RRSIG	DNSKEY 7 3 86400 20241109063156 20241101053156 56235 glb.nist.gov. LwSFwMJqkte7m1eS+wUhRE5gxOLrq+jkDIispIkL4c72sdP3ZYlMK+NW ZGNYtL1syES47LPqfOWvhIb6hLpKUbpwWNGpw0cpB21/eb9LAP0sYP0R p30YYYvOJuBE0YxNdhWq/KF5CMagVfOYkpBsCsA0z12kBrO1VK7NpsXj kziCfKQUrlxXxECkSwr16FcKvkXc8OpM7CaIZhIYi95uBuuImjWjPUDD 1aYani9RqYqnzJpcmNE9OhLEGGcV5xknU59FV9Qb3XvAV1ndstpy8U2O +lwqIYm0SQr+FD73D+dyL1MTGmdU3v4/cXTVc5+CTbaUJppkVa1JntG+ RaDXXQ==
 		glb.nist.gov.		86400	IN	RRSIG	DNSKEY 7 3 86400 20241109063156 20241101053156 57306 glb.nist.gov. h1SV0GVgKc0HHDyKTKfqJZQXXlMAhlOFuFPxXkEjW3t9CtMhc6BQYAdf 6Wl0sv/RL44Ll4f3Y3n6ge+fpyvQya2BvcLK0GgHCFQuYfub8/stGxbE AH6yamoO30BDL/D967jaO0wfHMoTCueph6zwcYD1FOXAsl2BIenY5v/4 FqWfcxrUKmGhm4g1GrR0yTj8THGnkBPcYn8QowoVCjqKKR3rPT5lCu4f Kv0GzLR8Ty8ZOqt9PZqSg/5R1awPw8NGLFiyOh/sQV42K1uDLpbPy6Tc wD5Zkc4e/6Ytra5BWwRu+l74Y9rMOjw7bKf3i5XEKRychOe1SoFvyPu8 8fZFwQ==
 	*/
+	cfg := DefaultConfig()
 
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
@@ -672,8 +687,8 @@ func TestAuthenticate_ValidWithMultipleRRSigsForSameRRSet(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Len(t, set, 3)
-	assert.True(t, set.Valid())
-	assert.NoError(t, set.Verify())
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
+	assert.NoError(t, set.Verify(cfg.RequireAllSignaturesValid))
 
 	assert.False(t, set[0].wildcard)
 	assert.False(t, set[1].wildcard)
@@ -681,6 +696,7 @@ func TestAuthenticate_ValidWithMultipleRRSigsForSameRRSet(t *testing.T) {
 }
 
 func TestAuthenticate_ValidWithMultipleRRSetsOfSameTypeDifferentName(t *testing.T) {
+	cfg := DefaultConfig()
 
 	rrset1 := []dns.RR{
 		newRR("a.example.com. 3600 IN CNAME b.example.com."),
@@ -702,8 +718,8 @@ func TestAuthenticate_ValidWithMultipleRRSetsOfSameTypeDifferentName(t *testing.
 	assert.NoError(t, err)
 
 	assert.Len(t, set, 3)
-	assert.True(t, set.Valid())
-	assert.NoError(t, set.Verify())
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
+	assert.NoError(t, set.Verify(cfg.RequireAllSignaturesValid))
 
 	assert.False(t, set[0].wildcard)
 	assert.False(t, set[1].wildcard)

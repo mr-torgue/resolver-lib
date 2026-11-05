@@ -3,11 +3,12 @@ package dnssec
 import (
 	"context"
 	"fmt"
-	"github.com/mr-torgue/dns"
 	"slices"
+
+	"github.com/mr-torgue/dns"
 )
 
-func verifyRRSETs(ctx context.Context, r *result, keys []*dns.DNSKEY) (AuthenticationResult, error) {
+func verifyRRSETs(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {
 
 	answerSignatures, err := authenticate(r.zone.Name(), r.msg.Answer, keys, answerSection)
 	if err != nil {
@@ -21,7 +22,7 @@ func verifyRRSETs(ctx context.Context, r *result, keys []*dns.DNSKEY) (Authentic
 
 	recordSignatures := slices.Concat(answerSignatures, authoritySignatures)
 
-	if err = recordSignatures.Verify(); err != nil {
+	if err = recordSignatures.Verify(requireAllSignaturesValid); err != nil {
 		return Bogus, fmt.Errorf("%w: %w", ErrBogusResultFound, err)
 	}
 

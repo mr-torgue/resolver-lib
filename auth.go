@@ -28,8 +28,12 @@ type authenticatorInput struct {
 	msg *dns.Msg
 }
 
-func newAuthenticator(ctx context.Context, question dns.Question) *authenticator {
-	a := dnssec.NewAuth(ctx, question)
+func newAuthenticator(ctx context.Context, question dns.Question, config *Config) *authenticator {
+	a := dnssec.NewAuth(ctx, question,
+		dnssec.WithTrustAnchors(config.trustAnchors),
+		dnssec.WithMaxAllowedTTL(config.maxAllowedTTL),
+		dnssec.WithLogger(config.loggerOrDefault()),
+	)
 	auth := &authenticator{
 		ctx:        ctx,
 		auth:       a,
@@ -46,7 +50,6 @@ func (a *authenticator) close() {
 		a.finished.Store(true)
 		a.processing.Wait()
 		close(a.queue)
-		a.queue = nil
 	})
 }
 

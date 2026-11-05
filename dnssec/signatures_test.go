@@ -2,10 +2,11 @@ package dnssec
 
 import (
 	"errors"
-	"github.com/mr-torgue/dns"
-	"github.com/stretchr/testify/assert"
 	"slices"
 	"testing"
+
+	"github.com/mr-torgue/dns"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSignatures_FilterOnTypeAndExtractDSRecords(t *testing.T) {
@@ -73,17 +74,16 @@ func TestSignatures_FilterOnTypeAndExtractDSRecords(t *testing.T) {
 }
 
 func TestSignatures_ValidAndVerify_RequireAllSignaturesValid(t *testing.T) {
-
-	RequireAllSignaturesValid = true
+	requireAllSignaturesValid := true
 
 	// An empty set is not a valid set.
 
 	set := signatures{}
 
-	if set.Valid() {
+	if set.Valid(requireAllSignaturesValid) {
 		t.Error("expected invalid signature")
 	}
-	err := set.Verify()
+	err := set.Verify(requireAllSignaturesValid)
 	if err == nil {
 		t.Errorf("expected signature error got %v", err)
 	}
@@ -106,10 +106,10 @@ func TestSignatures_ValidAndVerify_RequireAllSignaturesValid(t *testing.T) {
 		},
 	}
 
-	if !set.Valid() {
+	if !set.Valid(requireAllSignaturesValid) {
 		t.Error("expected valid signature")
 	}
-	if err := set.Verify(); err != nil {
+	if err := set.Verify(requireAllSignaturesValid); err != nil {
 		t.Errorf("expected valid signature error got %v", err)
 	}
 
@@ -127,10 +127,10 @@ func TestSignatures_ValidAndVerify_RequireAllSignaturesValid(t *testing.T) {
 		},
 	})
 
-	if set.Valid() {
+	if set.Valid(requireAllSignaturesValid) {
 		t.Error("expected invalid signature")
 	}
-	err = set.Verify()
+	err = set.Verify(requireAllSignaturesValid)
 	if err == nil {
 		t.Errorf("expected signature error got %v", err)
 	}
@@ -161,10 +161,10 @@ func TestSignatures_ValidAndVerify_RequireAllSignaturesValid(t *testing.T) {
 		},
 	})
 
-	if set.Valid() {
+	if set.Valid(requireAllSignaturesValid) {
 		t.Error("expected invalid signature")
 	}
-	err = set.Verify()
+	err = set.Verify(requireAllSignaturesValid)
 	if err == nil {
 		t.Errorf("expected signature error got %v", err)
 	}
@@ -196,26 +196,26 @@ func TestSignatures_ValidAndVerify_RequireAllSignaturesValid(t *testing.T) {
 			verified: false,
 		},
 	})
-	err = set.Verify()
+	err = set.Verify(requireAllSignaturesValid)
 	if !errors.Is(err, ErrUnableToVerify) {
 		t.Errorf("expected error to be ErrUnableToVerify")
 	}
 
-	RequireAllSignaturesValid = DefaultRequireAllSignaturesValid
 }
 
 func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ZeroAndOneSignature(t *testing.T) {
 
+	cfg := DefaultConfig()
 	ErrTest1 := errors.New("test error 1")
 
 	// An empty set is not a valid set.
 
 	set := signatures{}
 
-	if set.Valid() {
+	if set.Valid(cfg.RequireAllSignaturesValid) {
 		t.Error("expected invalid signature")
 	}
-	err := set.Verify()
+	err := set.Verify(cfg.RequireAllSignaturesValid)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrSignatureSetEmpty)
 
@@ -230,9 +230,9 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ZeroAndOneSignat
 		},
 	}
 
-	assert.True(t, set.Valid())
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.NoError(t, err)
 
 	//---
@@ -247,9 +247,9 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ZeroAndOneSignat
 		},
 	}
 
-	assert.False(t, set.Valid())
+	assert.False(t, set.Valid(cfg.RequireAllSignaturesValid))
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.ErrorIs(t, err, ErrVerifyFailed)
 	assert.ErrorIs(t, err, ErrUnableToVerify)
 
@@ -266,15 +266,16 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ZeroAndOneSignat
 		},
 	}
 
-	assert.False(t, set.Valid())
+	assert.False(t, set.Valid(cfg.RequireAllSignaturesValid))
 
-	err = set.Verify()
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.ErrorIs(t, err, ErrVerifyFailed)
 	assert.ErrorIs(t, err, ErrTest1)
 
 }
 
 func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSignature(t *testing.T) {
+	cfg := DefaultConfig()
 
 	ErrTest1 := errors.New("test error 1")
 	ErrTest2 := errors.New("test error 2")
@@ -296,8 +297,8 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSigna
 		},
 	}
 
-	assert.True(t, set.Valid())
-	err := set.Verify()
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err := set.Verify(cfg.RequireAllSignaturesValid)
 	assert.NoError(t, err)
 
 	//---
@@ -320,8 +321,8 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSigna
 		},
 	}
 
-	assert.False(t, set.Valid())
-	err = set.Verify()
+	assert.False(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.ErrorIs(t, err, ErrVerifyFailed)
 	assert.ErrorIs(t, err, ErrUnableToVerify)
 
@@ -346,8 +347,8 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSigna
 		},
 	}
 
-	assert.False(t, set.Valid())
-	err = set.Verify()
+	assert.False(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.ErrorIs(t, err, ErrVerifyFailed)
 	assert.ErrorIs(t, err, ErrTest1)
 
@@ -381,8 +382,8 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSigna
 		},
 	}
 
-	assert.True(t, set.Valid())
-	err = set.Verify()
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.NoError(t, err)
 
 	//---
@@ -414,13 +415,14 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_MoreThanOneSigna
 		},
 	}
 
-	assert.True(t, set.Valid())
-	err = set.Verify()
+	assert.True(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err = set.Verify(cfg.RequireAllSignaturesValid)
 	assert.NoError(t, err)
 
 }
 
 func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ErrorWrapping(t *testing.T) {
+	cfg := DefaultConfig()
 	ErrTest1 := errors.New("test error 1")
 	ErrTest2 := errors.New("test error 2")
 	ErrTest3 := errors.New("test error 3")
@@ -457,8 +459,8 @@ func TestSignatures_ValidAndVerify_verifyOneOrMoreRRSigPerRRSet_ErrorWrapping(t 
 		},
 	}
 
-	assert.False(t, set.Valid())
-	err := set.Verify()
+	assert.False(t, set.Valid(cfg.RequireAllSignaturesValid))
+	err := set.Verify(cfg.RequireAllSignaturesValid)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrVerifyFailed)
 	assert.ErrorIs(t, err, ErrTest1)
