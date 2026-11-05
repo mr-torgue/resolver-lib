@@ -77,7 +77,7 @@ func TestAuthenticate_ValidFALCON1024(t *testing.T) {
 }
 
 func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
-	assert.Panics(t, func() { testKeyWithAlgorithm(32) }) // note if we every use 32, this will not be asserted
+	assert.Panics(t, func() { testKeyWithAlgorithm(37) }) // note if we every use 32, this will not be asserted
 
 	rrset := []dns.RR{
 		newRR("example.com. 3600 IN MX 10 mx1.example.com."),
@@ -86,7 +86,7 @@ func TestAuthenticate_InvalidAlgorithm(t *testing.T) {
 
 	// generate proper key, but change algorithm should fail
 	key := testKeyWithAlgorithm(20)
-	key.key.Algorithm = 32
+	key.key.Algorithm = 37
 	assert.Panics(t, func() { key.sign(rrset, 0, 0) })
 
 	//
