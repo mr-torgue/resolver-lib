@@ -172,6 +172,7 @@ func (resolver *Resolver) resolveLabel(ctx context.Context, d *domain, z zone, q
 }
 
 func (resolver *Resolver) checkForMissingZones(ctx context.Context, d *domain, z zone, rmsg *dns.Msg, auth *authenticator) zone {
+
 	records := append(rmsg.Ns, rmsg.Answer...)
 	if len(records) == 0 {
 		return z
