@@ -3,6 +3,8 @@ package resolver
 import (
 	"context"
 	"net"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -223,5 +225,74 @@ func TestResolver_ShutdownCancelsBackgroundEnrichment(t *testing.T) {
 	case <-cancelled:
 	case <-time.After(2 * time.Second):
 		t.Fatal("background enrichment was not cancelled by Shutdown")
+	}
+}
+
+// openFDs reports how many file descriptors the test process currently holds.
+func openFDs(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Logf("cannot count open FDs: %v", err)
+		return -1
+	}
+	return len(entries)
+}
+
+// TestResolver_BackgroundEnrichmentOutlivesRequest demonstrates that background
+// pool enrichment keeps holding a goroutine (and keeps doing exchanges) after
+// the request that created the zone has ended; only Shutdown stops it.
+func TestResolver_BackgroundEnrichmentOutlivesRequest(t *testing.T) {
+	started := make(chan struct{}, 1)
+	stopped := make(chan struct{}, 1)
+	blocking := &mockExchanger{mockExchange: func(ctx context.Context, qmsg *dns.Msg) *Response {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		select {
+		case stopped <- struct{}{}:
+		default:
+		}
+		return &Response{Err: ctx.Err()}
+	}}
+
+	nameservers := []*dns.NS{
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns1.example.com."},
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns2.example.com."},
+	}
+	extra := []dns.RR{
+		&dns.A{Hdr: dns.RR_Header{Name: "ns1.example.com.", Rrtype: dns.TypeA, Ttl: 300}, A: net.ParseIP("192.0.2.53")},
+	}
+
+	resolver := NewResolver(ConfigBuilder())
+
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	z, err := resolver.funcs.createZone(reqCtx, "example.com.", ".", nameservers, extra, blocking, resolver.config)
+	require.NoError(t, err)
+	require.NotNil(t, z)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background enrichment did not start")
+	}
+	t.Logf("while enrichment runs: goroutines=%d openFDs=%d", runtime.NumGoroutine(), openFDs(t))
+
+	reqCancel() // the request that created the zone ends here
+
+	select {
+	case <-stopped:
+		t.Fatal("enrichment stopped when the request ended; expected it to keep running until Shutdown")
+	case <-time.After(300 * time.Millisecond):
+	}
+	t.Logf("after request ended:  goroutines=%d openFDs=%d", runtime.NumGoroutine(), openFDs(t))
+
+	resolver.Shutdown()
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not stop background enrichment")
 	}
 }
