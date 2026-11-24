@@ -9,6 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// resetIPv6Globals restores the package-global IPv6 availability state,
+// so tests that override it do not leak their override into later tests
+// (e.g. real-network tests that would then prefer unreachable IPv6 servers).
+func resetIPv6Globals() {
+	ipv6Answered.Store(false)
+	ipv6Available.Store(false)
+}
+
 type TestPoolExchangeMockNameserver struct {
 	f func(context.Context, *dns.Msg) *Response
 }
@@ -120,6 +128,8 @@ func TestPoolExchange_IPv4OnlySecondTry(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6Unavailable(t *testing.T) {
+
+	t.Cleanup(resetIPv6Globals)
 	ns1Called := false
 	ns1 := TestPoolExchangeMockNameserver{
 		func(context.Context, *dns.Msg) *Response {
@@ -176,6 +186,8 @@ func TestPoolExchange_IPv6Unavailable(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6OnlyFirstTry(t *testing.T) {
+
+	t.Cleanup(resetIPv6Globals)
 	ns1Called := false
 	ns1 := TestPoolExchangeMockNameserver{
 		func(context.Context, *dns.Msg) *Response {
@@ -215,6 +227,8 @@ func TestPoolExchange_IPv6OnlyFirstTry(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6OnlySecondTry(t *testing.T) {
+
+	t.Cleanup(resetIPv6Globals)
 	ErrTest := errors.New("test error")
 
 	ns1Called := false
@@ -257,6 +271,8 @@ func TestPoolExchange_IPv6OnlySecondTry(t *testing.T) {
 }
 
 func TestPoolExchange_Error(t *testing.T) {
+
+	t.Cleanup(resetIPv6Globals)
 	ErrTest := errors.New("test error")
 
 	ns1Called := false
@@ -321,4 +337,24 @@ func TestPoolExchange_Error(t *testing.T) {
 		assert.Contains(t, r.Err.Error(), "example.com.")
 		assert.Contains(t, r.Err.Error(), "test.zone")
 	}
+}
+
+// A pool that, through a race between count and slice updates, yields no
+// server at all must return an error response rather than panic.
+func TestPoolExchange_NoServerAvailable(t *testing.T) {
+	t.Cleanup(resetIPv6Globals)
+
+	pool := nameserverPool{}
+	// Count claims an IPv6 server exists, but the slice is empty, so both
+	// attempts fail to return a nameserver.
+	pool.ipv6Count.Store(1)
+	ipv6Answered.Store(true)
+	ipv6Available.Store(false)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	r := pool.exchange(context.Background(), msg)
+	assert.True(t, r.HasError())
+	assert.ErrorIs(t, r.Err, ErrUnableToResolveAnswer)
 }

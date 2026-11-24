@@ -1090,7 +1090,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	response := resolver.Exchange(context.Background(), qmsg)
 	require.NotNil(t, response)
-	require.NotNil(t, response.Msg)
+	require.NotNil(t, response.Msg) // guard: fail cleanly (not panic) if the exchange failed
 	assert.Equal(t, 2, len(response.Msg.Answer))
 	// two ip addresses should be returned, we test for one of them
 	found := false
@@ -1112,6 +1112,7 @@ func TestResolver_Cache(t *testing.T) {
 	qmsg.SetQuestion("miek.nl.", dns.TypeA)
 	qmsg.SetEdns0(1232, true)
 	response = resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response.Msg) // guard: fail cleanly (not panic) if the exchange failed
 	require.Equal(t, 3, len(response.Msg.Answer))
 
 	// error prone, verfiy expected outcome with dig miek.nl +dnssec
