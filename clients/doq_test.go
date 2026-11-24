@@ -108,3 +108,69 @@ func TestLookupDoQ_TC(t *testing.T) {
 	assert.NotNil(t, rmsg)
 	assert.False(t, rmsg.Truncated)
 }
+
+func TestLookupDoQ_DNSTestDev(t *testing.T) {
+	type DNSTestCase struct {
+		name       string
+		qname      string
+		rcode      int
+		checkRcode bool
+		ad         bool
+		checkAD    bool
+		expected   string
+	}
+
+	tests := []DNSTestCase{
+		{"alg13.dnstest.dev apex (ECDSA P-256) returns AD answer", "alg13.dnstest.dev", dns.RcodeSuccess, true, true, true, "188.114.96.0"},
+		{"valid.alg13.dnstest.dev returns AD answer", "valid.alg13.dnstest.dev", dns.RcodeSuccess, true, true, true, "188.114.96.0"},
+		{"invalid.alg13.dnstest.dev is rejected", "invalid.alg13.dnstest.dev", dns.RcodeServerFailure, true, false, true, ""},
+		{"expired.alg13.dnstest.dev is rejected", "expired.alg13.dnstest.dev", dns.RcodeServerFailure, true, false, true, ""},
+		{"invalid-dnskey.alg13.dnstest.dev", "invalid-dnskey.alg13.dnstest.dev", 0, false, false, false, ""},
+		{"expired-dnskey.alg13.dnstest.dev", "expired-dnskey.alg13.dnstest.dev", 0, false, false, false, ""},
+		{"mldsa44.dnstest.dev apex (ML-DSA-44)", "mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"valid.mldsa44.dnstest.dev", "valid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"invalid.mldsa44.dnstest.dev", "invalid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"expired.mldsa44.dnstest.dev", "expired.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"invalid-dnskey.mldsa44.dnstest.dev", "invalid-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"expired-dnskey.mldsa44.dnstest.dev", "expired-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"dual-valid.mldsa44.dnstest.dev", "dual-valid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"upgrade.mldsa44.dnstest.dev", "upgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+		{"downgrade.mldsa44.dnstest.dev", "downgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, false, false, false, ""},
+	}
+
+	tlsconf := &tls.Config{
+		NextProtos:         []string{"doq"},
+		ServerName:         dns.Fqdn("dns.quad9.net"),
+		InsecureSkipVerify: false,
+	}
+	client := DOQClient{
+		Port:      "853",
+		TLSConfig: tlsconf,
+		Timeout:   5 * time.Second,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qmsg := new(dns.Msg)
+			qmsg.SetQuestion(dns.Fqdn(tt.qname), dns.TypeA)
+			qmsg.SetEdns0(1232, true)
+			qmsg.MsgHdr.RecursionDesired = true
+
+			ctx, _ := context.WithTimeout(context.Background(), 6*time.Second)
+			rmsg, rtt, err := client.ExchangeContext(ctx, qmsg, "9.9.9.9")
+
+			require.NoError(t, err)
+			require.NotNil(t, rmsg, "rmsg should not be nil")
+			assert.Greater(t, 6*time.Second, rtt, "timeout > rtt")
+			if tt.checkRcode {
+				assert.Equal(t, tt.rcode, rmsg.Rcode, "rcodes should match")
+			}
+			if tt.checkAD {
+				assert.Equal(t, tt.ad, rmsg.AuthenticatedData, "AD bits should match")
+			}
+			if tt.expected != "" {
+				assert.Contains(t, rmsg.String(), tt.expected, "answers should match")
+			}
+		})
+	}
+}

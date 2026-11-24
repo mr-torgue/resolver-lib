@@ -27,6 +27,14 @@ func IPv6Available() bool {
 	return false
 }
 
+// markIPv6Unavailable latches the IPv6 verdict to unavailable, e.g. after a
+// dial to an IPv6 address failed with ENETUNREACH, so later queries in this
+// process go straight to IPv4 instead of retrying IPv6.
+func markIPv6Unavailable() {
+	ipv6Available.Store(false)
+	ipv6Answered.Store(true)
+}
+
 // UpdateIPv6Availability sense checks if we can get a DNS response from an IPv6 address.
 func UpdateIPv6Availability() {
 	defer ipv6Answered.Store(true)

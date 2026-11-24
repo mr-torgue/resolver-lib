@@ -3,6 +3,8 @@ package resolver
 import (
 	"context"
 	"errors"
+	"os"
+	"syscall"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -120,6 +122,14 @@ func TestPoolExchange_IPv4OnlySecondTry(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6Unavailable(t *testing.T) {
+	// The IPv6 verdict is latched process-wide; restore it so later tests in
+	// this `go test` process are not affected by what we set here.
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
 	ns1Called := false
 	ns1 := TestPoolExchangeMockNameserver{
 		func(context.Context, *dns.Msg) *Response {
@@ -173,6 +183,43 @@ func TestPoolExchange_IPv6Unavailable(t *testing.T) {
 
 	assert.False(t, ns1Called)
 	assert.True(t, ns2Called)
+}
+
+// TestPoolExchange_IPv6UnreachableDisablesIPv6ForProcess shows the self-heal:
+// when dialing an IPv6 nameserver fails with ENETUNREACH, the process-wide
+// IPv6 verdict is latched off, so later exchanges go straight to IPv4.
+func TestPoolExchange_IPv6UnreachableDisablesIPv6ForProcess(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+	ipv6Answered.Store(true)
+	ipv6Available.Store(true)
+
+	ns6 := TestPoolExchangeMockNameserver{
+		func(context.Context, *dns.Msg) *Response {
+			return &Response{Err: &os.SyscallError{Syscall: "connect", Err: syscall.ENETUNREACH}}
+		},
+	}
+	ns4Called := false
+	ns4 := TestPoolExchangeMockNameserver{
+		func(context.Context, *dns.Msg) *Response {
+			ns4Called = true
+			return &Response{Msg: new(dns.Msg)}
+		},
+	}
+
+	pool := nameserverPool{
+		ipv4: []exchanger{ns4},
+		ipv6: []exchanger{ns6},
+	}
+	pool.updateIPCount()
+
+	r := pool.exchange(context.Background(), &dns.Msg{})
+	assert.False(t, r.HasError(), "the IPv4 retry should succeed")
+	assert.True(t, ns4Called)
+	assert.False(t, IPv6Available(), "ENETUNREACH on an IPv6 dial must latch IPv6 off for the whole process")
 }
 
 func TestPoolExchange_IPv6OnlyFirstTry(t *testing.T) {

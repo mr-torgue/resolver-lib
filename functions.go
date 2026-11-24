@@ -136,6 +136,18 @@ func recordsOfTypeExist(rr []dns.RR, t uint16) bool {
 	return false
 }
 
+// recordsSignedOutsideZone reports whether any RRSIG in rr was made by a zone
+// other than zoneName.
+func recordsSignedOutsideZone(rr []dns.RR, zoneName string) bool {
+	zoneName = dns.CanonicalName(zoneName)
+	for _, record := range rr {
+		if sig, ok := record.(*dns.RRSIG); ok && dns.CanonicalName(sig.SignerName) != zoneName {
+			return true
+		}
+	}
+	return false
+}
+
 func removeRecordsOfType(rr []dns.RR, t uint16) []dns.RR {
 	if len(rr) == 0 || !recordsOfTypeExist(rr, t) {
 		return rr

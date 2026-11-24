@@ -34,7 +34,7 @@ func main() {
 	resolver.SetLogger(logger)
 
 	//r := resolver.NewResolver(*resolver.ConfigBuilder(resolver.WithCustomRoot("testdata/rootzones/custom.root", "testdata/rootanchors/custom-valid.xml")))
-	r := resolver.NewResolver(resolver.ConfigBuilder(resolver.WithClient("doq", true)))
+	r := resolver.NewResolver(resolver.ConfigBuilder(resolver.WithClient("udp", true)))
 
 	msg := new(dns.Msg)
 

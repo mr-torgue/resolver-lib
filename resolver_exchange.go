@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
@@ -204,6 +205,25 @@ func (resolver *Resolver) checkForMissingZones(ctx context.Context, d *domain, z
 		return z
 	}
 
+	// The record owner may equal the current label without being the current
+	// zone itself: the answer can then be signed by a child zone we have not
+	// discovered yet (parent and child sharing nameservers means no referral
+	// was returned, so d.gap() below is empty). If the records are signed by
+	// such a zone, probe for its SOA; if the name is a zone cut, register the
+	// zone and fetch its DS so the response can be validated.
+	if dns.CanonicalName(nextRecordsOwner) == dns.CanonicalName(d.current()) &&
+		dns.CanonicalName(nextRecordsOwner) != dns.CanonicalName(z.name()) &&
+		recordsSignedOutsideZone(records, z.name()) {
+		if soa, err := z.soa(ctx, nextRecordsOwner); err == nil && soa != nil {
+			newZone := z.clone(nextRecordsOwner, z.name())
+			if auth != nil {
+				auth.addDelegationSignerLink(z, newZone.name(), resolver.config.udpsize)
+			}
+			resolver.zones.add(newZone)
+			z = newZone
+		}
+	}
+
 	// d.current() here is the domain we're expecting.
 	// So if it's not what we get, we expect it to be included in the missing zones slice.
 
@@ -261,6 +281,21 @@ func (resolver *Resolver) processDelegation(ctx context.Context, z zone, rmsg *d
 	return newZone, nil
 }
 
+// cacheValidationStatus maps a dnssec.AuthenticationResult to a
+// cache.ValidationStatus. Unknown results are not recorded (ok == false).
+func cacheValidationStatus(auth dnssec.AuthenticationResult) (cache.ValidationStatus, bool) {
+	switch auth {
+	case dnssec.Secure:
+		return cache.Secure, true
+	case dnssec.Insecure:
+		return cache.Insecure, true
+	case dnssec.Bogus:
+		return cache.Bogus, true
+	default:
+		return cache.Indeterminate, false
+	}
+}
+
 func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authenticator, qmsg *dns.Msg, response *Response) *Response {
 	if auth != nil {
 		authTime := time.Now()
@@ -315,6 +350,26 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 				if rtypeTTL.found {
 					rr.Header().Ttl = min(rtypeTTL.ttl, rr.Header().Ttl)
 				}
+			}
+		}
+	}
+
+	//---
+
+	// Cache the response once, now that validation is done. The validation
+	// status is stored with the entries: Secure entries are served with the AD
+	// bit, and a Bogus response evicts any existing entries instead of being
+	// cached. When no validation was performed (no DO bit), entries are stored
+	// as Indeterminate and are not served to DO queries.
+	if resolver.config.cache != nil && response.Msg != nil && len(qmsg.Question) > 0 {
+		status := cache.Indeterminate
+		if s, ok := cacheValidationStatus(response.Auth); ok {
+			status = s
+		}
+		rcodeCacheable := response.Msg.Rcode == dns.RcodeSuccess || response.Msg.Rcode == dns.RcodeNameError
+		if status == cache.Bogus || (rcodeCacheable && !response.HasError()) {
+			if err := resolver.config.cache.Update(qmsg.Question[0], response.Msg, status); err != nil {
+				Log.Warningf("error trying to update cache after validation: %w", err)
 			}
 		}
 	}
