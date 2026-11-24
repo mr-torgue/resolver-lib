@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
@@ -261,6 +262,21 @@ func (resolver *Resolver) processDelegation(ctx context.Context, z zone, rmsg *d
 	return newZone, nil
 }
 
+// cacheValidationStatus maps a dnssec.AuthenticationResult to a
+// cache.ValidationStatus. Unknown results are not recorded (ok == false).
+func cacheValidationStatus(auth dnssec.AuthenticationResult) (cache.ValidationStatus, bool) {
+	switch auth {
+	case dnssec.Secure:
+		return cache.Secure, true
+	case dnssec.Insecure:
+		return cache.Insecure, true
+	case dnssec.Bogus:
+		return cache.Bogus, true
+	default:
+		return cache.Indeterminate, false
+	}
+}
+
 func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authenticator, qmsg *dns.Msg, response *Response) *Response {
 	if auth != nil {
 		authTime := time.Now()
@@ -315,6 +331,26 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 				if rtypeTTL.found {
 					rr.Header().Ttl = min(rtypeTTL.ttl, rr.Header().Ttl)
 				}
+			}
+		}
+	}
+
+	//---
+
+	// Cache the response once, now that validation is done. The validation
+	// status is stored with the entries: Secure entries are served with the AD
+	// bit, and a Bogus response evicts any existing entries instead of being
+	// cached. When no validation was performed (no DO bit), entries are stored
+	// as Indeterminate and are not served to DO queries.
+	if resolver.config.cache != nil && response.Msg != nil && len(qmsg.Question) > 0 {
+		status := cache.Indeterminate
+		if s, ok := cacheValidationStatus(response.Auth); ok {
+			status = s
+		}
+		rcodeCacheable := response.Msg.Rcode == dns.RcodeSuccess || response.Msg.Rcode == dns.RcodeNameError
+		if status == cache.Bogus || (rcodeCacheable && !response.HasError()) {
+			if err := resolver.config.cache.Update(qmsg.Question[0], response.Msg, status); err != nil {
+				Log.Warningf("error trying to update cache after validation: %w", err)
 			}
 		}
 	}
