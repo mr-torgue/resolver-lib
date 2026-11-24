@@ -296,3 +296,55 @@ func TestResolver_BackgroundEnrichmentOutlivesRequest(t *testing.T) {
 		t.Fatal("Shutdown did not stop background enrichment")
 	}
 }
+
+// TestResolver_BackgroundGoroutineSurvivesQueryBy10s shows that a background
+// enrichment goroutine is still running 10 seconds after the query that
+// started it has returned, when the exchange does not observe context
+// cancellation. Skipped in -short mode.
+func TestResolver_BackgroundGoroutineSurvivesQueryBy10s(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 10s sleep test in -short mode")
+	}
+
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	stuck := &mockExchanger{mockExchange: func(ctx context.Context, qmsg *dns.Msg) *Response {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release // deliberately ignores ctx: simulates an exchange stuck past the enrichment timeout
+		return &Response{Msg: new(dns.Msg)}
+	}}
+
+	nameservers := []*dns.NS{
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns1.example.com."},
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns2.example.com."},
+	}
+	extra := []dns.RR{
+		&dns.A{Hdr: dns.RR_Header{Name: "ns1.example.com.", Rrtype: dns.TypeA, Ttl: 300}, A: net.ParseIP("192.0.2.53")},
+	}
+
+	resolver := NewResolver(ConfigBuilder())
+	t.Cleanup(resolver.Shutdown)
+
+	baseline := runtime.NumGoroutine()
+
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	_, err := resolver.funcs.createZone(reqCtx, "example.com.", ".", nameservers, extra, stuck, resolver.config)
+	require.NoError(t, err)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background enrichment did not start")
+	}
+
+	reqCancel() // the query/request that created the zone ends here
+	time.Sleep(10 * time.Second)
+
+	assert.Greater(t, runtime.NumGoroutine(), baseline,
+		"background enrichment goroutine still running 10s after the query ended")
+
+	close(release) // let the stuck exchange finish so the test cleans up
+}

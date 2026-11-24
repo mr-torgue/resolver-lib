@@ -2,7 +2,9 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"syscall"
 
 	"github.com/miekg/dns"
 )
@@ -25,6 +27,11 @@ func (pool *nameserverPool) exchange(ctx context.Context, m *dns.Msg) *Response 
 	if hasIPv6 && IPv6Available() {
 		if server := pool.getIPv6(); server != nil {
 			response = server.exchange(ctx, m)
+			if response.HasError() && errors.Is(response.Err, syscall.ENETUNREACH) {
+				// No IPv6 route (anymore): latch IPv6 off for the rest of the
+				// process so later queries go straight to IPv4.
+				markIPv6Unavailable()
+			}
 		}
 	} else {
 		if server := pool.getIPv4(); server != nil {

@@ -6,6 +6,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestZones_ExpiredZonesAreSkippedButNeverRemoved shows that expired zones are
+// skipped during lookup but stay in the store forever: the zone map has no
+// eviction, so a long-running process keeps every zone it ever discovered.
+func TestZones_ExpiredZonesAreSkippedButNeverRemoved(t *testing.T) {
+	live := getMockZone("example.", ".")
+	expired := getMockZone("old.example.", "example.")
+	expired.mockExpired = func() bool { return true }
+
+	zs := &zones{zones: map[string]zone{}}
+	zs.add(live)
+	zs.add(expired)
+
+	assert.Equal(t, 2, zs.count())
+
+	list := zs.getZoneList("www.old.example.")
+	for _, z := range list {
+		assert.NotEqual(t, "old.example.", z.name(), "expired zones must not be returned by lookups")
+	}
+
+	assert.Equal(t, 2, zs.count(), "expired zones are never evicted from the store")
+}
+
 func TestZones_Get_ExistingZoneWithValidPool(t *testing.T) {
 	// Setup
 	z := &zoneImpl{zoneName: "example.com."}
