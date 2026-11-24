@@ -1,8 +1,9 @@
 package doe
 
 import (
-	"github.com/mr-torgue/dns"
 	"slices"
+
+	"github.com/miekg/dns"
 )
 
 func (doe *DenialOfExistenceNSEC3) PerformClosestEncloserProof(name string) (optedOut, closestEncloserProof, nextCloserNameProof, wildcardProof bool) {

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib"
 	"github.com/mr-torgue/resolver-lib/log"
 )

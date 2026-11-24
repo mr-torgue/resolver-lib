@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
 )
 

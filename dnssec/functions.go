@@ -1,7 +1,7 @@
 package dnssec
 
 import (
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func extractRecords[T dns.RR](rr []dns.RR) []T {

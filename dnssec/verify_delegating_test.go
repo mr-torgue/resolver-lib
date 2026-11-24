@@ -3,10 +3,11 @@ package dnssec
 import (
 	"context"
 	"errors"
-	"github.com/mr-torgue/dns"
-	"github.com/stretchr/testify/assert"
 	"slices"
 	"testing"
+
+	"github.com/miekg/dns"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVerify_DelegatingResponse(t *testing.T) {

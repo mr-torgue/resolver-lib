@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 //---------------------------------------------------------------------------------
@@ -170,7 +170,7 @@ func (z *zoneImpl) dnskeys(ctx context.Context) ([]dns.RR, error) {
 
 	z.dnskeyRecords = response.Msg.Answer
 
-	var ttl = MaxAllowedTTL
+	var ttl = z.config.maxAllowedTTL
 	for _, rr := range z.dnskeyRecords {
 		ttl = min(ttl, rr.Header().Ttl)
 	}

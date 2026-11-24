@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/mr-torgue/dns" // for openssl support
+	"github.com/miekg/dns" // for openssl support
 	"github.com/mr-torgue/resolver-lib"
 )
 

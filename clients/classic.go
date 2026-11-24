@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 // Wrapper around dns.Client. It takes care of Name Servers running on different ports.

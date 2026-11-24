@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/clients"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

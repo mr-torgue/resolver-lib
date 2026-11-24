@@ -1,6 +1,6 @@
 package resolver
 
-import "github.com/mr-torgue/dns"
+import "github.com/miekg/dns"
 
 type CacheInterface interface {
 	Get(zone string, qmsg *dns.Msg) (*dns.Msg, error)

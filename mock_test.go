@@ -3,7 +3,7 @@ package resolver
 import (
 	"context"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/mock"
 )
 

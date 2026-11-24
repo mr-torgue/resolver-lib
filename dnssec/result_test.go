@@ -3,8 +3,9 @@ package dnssec
 import (
 	"context"
 	"errors"
-	"github.com/mr-torgue/dns"
 	"testing"
+
+	"github.com/miekg/dns"
 )
 
 func TestResult_NoRecords(t *testing.T) {

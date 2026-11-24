@@ -4,7 +4,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 type zoneStore interface {

@@ -1,7 +1,7 @@
 package dnssec
 
 import (
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func (a *Authenticator) Result() (AuthenticationResult, DenialOfExistenceState, error) {
@@ -147,7 +147,7 @@ func (a *Authenticator) ResultTTLAuthority(rtype uint16) (uint32, bool) {
 func resultTTL(rtype uint16, ss signatures) (uint32, bool) {
 
 	found := false
-	ttl := MaxAllowedTTL
+	ttl := DefaultMaxAllowedTTL
 
 	for _, sig := range ss {
 		if sig.rtype == rtype && sig.verified {
