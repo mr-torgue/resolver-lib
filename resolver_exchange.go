@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/dnssec"
 )
 
@@ -261,11 +262,38 @@ func (resolver *Resolver) processDelegation(ctx context.Context, z zone, rmsg *d
 	return newZone, nil
 }
 
+// cacheValidationStatus maps a dnssec.AuthenticationResult to a
+// cache.ValidationStatus. Unknown results are not recorded (ok == false).
+func cacheValidationStatus(auth dnssec.AuthenticationResult) (cache.ValidationStatus, bool) {
+	switch auth {
+	case dnssec.Secure:
+		return cache.Secure, true
+	case dnssec.Insecure:
+		return cache.Insecure, true
+	case dnssec.Bogus:
+		return cache.Bogus, true
+	default:
+		return cache.Indeterminate, false
+	}
+}
+
 func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authenticator, qmsg *dns.Msg, response *Response) *Response {
 	if auth != nil {
 		authTime := time.Now()
 		response.Auth, response.Doe, response.Err = auth.result()
 		Log.Infof("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String())
+
+		// Records were inserted into the cache (as Indeterminate) before
+		// validation. Now that the outcome is known, mark all entries that
+		// make up this response: Secure/Insecure are served (AD is set for
+		// Secure), Bogus entries are removed so they are never served.
+		if resolver.config.cache != nil && response.Msg != nil {
+			if status, ok := cacheValidationStatus(response.Auth); ok {
+				if err := resolver.config.cache.UpdateValidation("", qmsg.Question[0], response.Msg, status); err != nil {
+					Log.Warningf("error trying to update validation status in cache: %w", err)
+				}
+			}
+		}
 
 		/*
 			   If the resolver accepts the RRset as authentic, the validator MUST

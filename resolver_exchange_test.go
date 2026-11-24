@@ -1207,3 +1207,35 @@ func BenchmarkResolver_Exchange_TCP_1(b *testing.B) {
 		_ = resolver.Exchange(context.Background(), msg)
 	}
 }
+
+// TestResolver_Cache_Validation tests that after a validated response the
+// cache entries are marked (Secure here), so a subsequent DO query is served
+// from the cache with the AD bit set.
+func TestResolver_Cache_Validation(t *testing.T) {
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("sidn.nl.", dns.TypeA)
+	qmsg.SetEdns0(1232, true)
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
+	require.NotNil(t, resolver.config.cache)
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
+	require.True(t, response.Msg.AuthenticatedData)
+
+	// The cache entry must now be validated: a DO query against the cache
+	// directly must be served with AD, not rejected as unvalidated.
+	cached, err := resolver.config.cache.Get("", qmsg)
+	require.NoError(t, err)
+	assert.True(t, cached.AuthenticatedData)
+	assert.Equal(t, dns.RcodeSuccess, cached.Rcode)
+	assert.NotEmpty(t, cached.Answer)
+
+	// A second exchange is served from the cache and still has AD set.
+	response2 := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response2)
+	require.NotNil(t, response2.Msg)
+	assert.True(t, response2.Msg.AuthenticatedData)
+	assert.NotEmpty(t, response2.Msg.Answer)
+}

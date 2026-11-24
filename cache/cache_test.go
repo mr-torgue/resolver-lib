@@ -7,6 +7,7 @@ import (
 	"github.com/coredns/coredns/plugin/test"
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func cacheMsg(m *dns.Msg, tc test.Case) *dns.Msg {
@@ -333,6 +334,11 @@ func TestCacheInsertion(t *testing.T) {
 			m := tc.in.Msg()
 			m = cacheMsg(m, tc.in)
 			c.UpdateWithTime("", m.Question[0], m, now)
+			if tc.in.Do {
+				// A DO query is only served validated entries, so simulate the
+				// post-validation update that the resolver performs.
+				c.UpdateValidationWithTime("", m.Question[0], m, Secure, now)
+			}
 			resp, err := c.GetWithTime("", m, now)
 			//require.Nil(t, err)
 			found := err == nil
@@ -373,4 +379,239 @@ func TestCacheInsertion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testNow() time.Time {
+	now, _ := time.Parse(time.UnixDate, "Fri Apr 21 10:51:21 BST 2017")
+	return now
+}
+
+func queryMsg(qname string, qtype uint16, do bool) *dns.Msg {
+	q := new(dns.Msg)
+	q.SetQuestion(dns.Fqdn(qname), qtype)
+	if do {
+		q.SetEdns0(1232, true)
+	}
+	return q
+}
+
+// TestCacheValidationGate tests that validation status is recorded on entries
+// and enforced on Get: unvalidated entries are not served to DO queries,
+// Secure entries are served with AD, and Bogus entries are never served.
+func TestCacheValidationGate(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	in := test.Case{
+		Qname: "secure.example.", Qtype: dns.TypeA,
+		Answer: []dns.RR{test.A("secure.example. 3600 IN A 127.0.0.1")},
+	}
+	m := cacheMsg(in.Msg(), in)
+	qDO := queryMsg("secure.example.", dns.TypeA, true)
+	qNoDO := queryMsg("secure.example.", dns.TypeA, false)
+
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+	// DO query must not be served an unvalidated entry.
+	_, err := c.GetWithTime("", qDO, now)
+	assert.ErrorIs(t, err, ErrNotValidated)
+
+	// Non-DO query is served, but without AD.
+	resp, err := c.GetWithTime("", qNoDO, now)
+	require.NoError(t, err)
+	assert.False(t, resp.AuthenticatedData)
+	assert.Equal(t, 1, len(resp.Answer))
+	assert.Equal(t, dns.RcodeSuccess, resp.Rcode)
+
+	// CD bit disables the gate.
+	qCD := queryMsg("secure.example.", dns.TypeA, true)
+	qCD.CheckingDisabled = true
+	resp, err = c.GetWithTime("", qCD, now)
+	require.NoError(t, err)
+	assert.False(t, resp.AuthenticatedData)
+
+	// After validation, the entry is served to DO queries with AD set.
+	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Secure, now))
+	resp, err = c.GetWithTime("", qDO, now)
+	require.NoError(t, err)
+	assert.True(t, resp.AuthenticatedData)
+	assert.Equal(t, dns.RcodeSuccess, resp.Rcode)
+	assert.Equal(t, 1, len(resp.Answer))
+
+	// Insecure is served, but without AD.
+	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Insecure, now))
+	resp, err = c.GetWithTime("", qDO, now)
+	require.NoError(t, err)
+	assert.False(t, resp.AuthenticatedData)
+
+	// Bogus entries are removed and never served.
+	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Bogus, now))
+	_, err = c.GetWithTime("", qDO, now)
+	assert.ErrorIs(t, err, ErrCacheMiss)
+	_, err = c.GetWithTime("", qNoDO, now)
+	assert.ErrorIs(t, err, ErrCacheMiss)
+
+	// Safety net: even a manually inserted Bogus entry is not served.
+	k := Key("secure.example.", dns.TypeA)
+	c.cache.Add(k, &Entry{Name: "secure.example.", Type: dns.TypeA, Status: Bogus, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("secure.example. 3600 IN A 127.0.0.1")}, TTL: 3600, Expires: now.Add(time.Hour)})
+	_, err = c.GetWithTime("", qNoDO, now)
+	assert.ErrorIs(t, err, ErrCacheMiss)
+}
+
+// TestCacheNoDowngradeOfValidatedEntry tests that a later unvalidated insert
+// does not overwrite an already validated entry.
+func TestCacheNoDowngradeOfValidatedEntry(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	in := test.Case{
+		Qname: "node.example.", Qtype: dns.TypeA,
+		Answer: []dns.RR{test.A("node.example. 3600 IN A 127.0.0.1")},
+	}
+	m := cacheMsg(in.Msg(), in)
+	qDO := queryMsg("node.example.", dns.TypeA, true)
+
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Secure, now))
+	// A second, unvalidated update arrives (e.g. concurrent query).
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+	resp, err := c.GetWithTime("", qDO, now)
+	require.NoError(t, err)
+	assert.True(t, resp.AuthenticatedData)
+}
+
+// TestCacheKeyIdentityCheck tests that a hash collision does not serve the
+// wrong entry: Get verifies the entry's name and type against the question.
+func TestCacheKeyIdentityCheck(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	q := queryMsg("victim.example.", dns.TypeA, false)
+	k := Key("victim.example.", dns.TypeA)
+	// Simulate a collision: an entry stored under the same key, but for another name.
+	c.cache.Add(k, &Entry{Name: "other.example.", Type: dns.TypeA, Status: Secure, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("other.example. 3600 IN A 127.0.0.2")}, TTL: 3600, Expires: now.Add(time.Hour)})
+
+	_, err := c.GetWithTime("", q, now)
+	assert.ErrorIs(t, err, ErrCacheMiss)
+
+	// Case-insensitive match of the same name must hit.
+	q2 := queryMsg("ViCtIm.ExAmPlE.", dns.TypeA, false)
+	c.cache.Add(k, &Entry{Name: "victim.example.", Type: dns.TypeA, Status: Insecure, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("victim.example. 3600 IN A 127.0.0.1")}, TTL: 3600, Expires: now.Add(time.Hour)})
+	resp, err := c.GetWithTime("", q2, now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(resp.Answer))
+}
+
+// TestCacheTTLDecrementAndExpiry tests that TTLs are decremented by the time
+// spent in cache and that entries expire.
+func TestCacheTTLDecrementAndExpiry(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	in := test.Case{
+		Qname: "ttl.example.", Qtype: dns.TypeA,
+		Answer: []dns.RR{test.A("ttl.example. 3600 IN A 127.0.0.1")},
+	}
+	m := cacheMsg(in.Msg(), in)
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+	q := queryMsg("ttl.example.", dns.TypeA, false)
+
+	resp, err := c.GetWithTime("", q, now.Add(100*time.Second))
+	require.NoError(t, err)
+	assert.Equal(t, uint32(3500), resp.Answer[0].Header().Ttl)
+
+	_, err = c.GetWithTime("", q, now.Add(3601*time.Second))
+	assert.ErrorIs(t, err, ErrCacheExpired)
+}
+
+// TestCacheCopiesRecords tests that entries deep-copy records on insert and
+// copy on read, so neither the caller's message nor a served message can
+// mutate the cache.
+func TestCacheCopiesRecords(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	m := new(dns.Msg)
+	m.SetQuestion("copy.example.", dns.TypeA)
+	m.Answer = make([]dns.RR, 1, 4) // extra capacity: old code's append clobbered this
+	m.Answer[0] = test.A("copy.example. 3600 IN A 127.0.0.1")
+	m.Ns = []dns.RR{test.NS("copy.example. 3600 IN NS ns1.copy.example.")}
+
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+	// Mutating the source message after insert must not affect the cache.
+	m.Answer[0].Header().Ttl = 1
+	assert.Equal(t, 1, len(m.Answer), "answer section of the source message must not be clobbered")
+
+	q := queryMsg("copy.example.", dns.TypeA, false)
+	resp, err := c.GetWithTime("", q, now)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(resp.Answer))
+	assert.Equal(t, uint32(3600), resp.Answer[0].Header().Ttl)
+
+	// Mutating a served message must not affect the cache either.
+	resp.Answer[0].Header().Ttl = 5
+	resp2, err := c.GetWithTime("", q, now)
+	require.NoError(t, err)
+	assert.Equal(t, uint32(3600), resp2.Answer[0].Header().Ttl)
+}
+
+// TestCacheNegativeResponse tests that negative responses (NXDOMAIN / NODATA)
+// are cached under the question key with their rcode and authority records.
+func TestCacheNegativeResponse(t *testing.T) {
+	now := testNow()
+
+	tests := []struct {
+		name     string
+		rcode    int
+		qname    string
+	}{
+		{"NXDOMAIN", dns.RcodeNameError, "nx.example."},
+		{"NODATA", dns.RcodeSuccess, "nodata.example."},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewCache()
+			in := test.Case{
+				Rcode: tt.rcode,
+				Qname: tt.qname, Qtype: dns.TypeA,
+				Ns: []dns.RR{test.SOA("example. 3600 IN SOA ns1.example. hostmaster.example. 1 7200 3600 1209600 300")},
+			}
+			m := cacheMsg(in.Msg(), in)
+			require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+			q := queryMsg(tt.qname, dns.TypeA, false)
+			resp, err := c.GetWithTime("", q, now)
+			require.NoError(t, err)
+			assert.Equal(t, tt.rcode, resp.Rcode)
+			assert.Equal(t, 0, len(resp.Answer))
+			require.Equal(t, 1, len(resp.Ns))
+			assert.Equal(t, dns.TypeSOA, resp.Ns[0].Header().Rrtype)
+			assert.Equal(t, uint32(3600), resp.Ns[0].Header().Ttl)
+		})
+	}
+}
+
+// TestCacheRcodeRecorded tests that the entry rcode is populated on insert.
+func TestCacheRcodeRecorded(t *testing.T) {
+	now := testNow()
+	c := NewCache()
+
+	in := test.Case{
+		Rcode: dns.RcodeNameError,
+		Qname: "rc.example.", Qtype: dns.TypeA,
+		Ns:    []dns.RR{test.SOA("example. 3600 IN SOA ns1.example. hostmaster.example. 1 7200 3600 1209600 300")},
+	}
+	m := cacheMsg(in.Msg(), in)
+	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+
+	k := Key("rc.example.", dns.TypeA)
+	val, ok := c.cache.Get(k)
+	require.True(t, ok)
+	require.NotNil(t, val)
+	assert.Equal(t, dns.RcodeNameError, val.Rcode)
+	assert.Equal(t, Indeterminate, val.Status)
 }
