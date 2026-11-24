@@ -9,7 +9,11 @@ import (
 	"github.com/miekg/dns"
 )
 
-func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {
+// createZone builds a zone for name. ctx is the per-request context (used for
+// synchronous enrichment); bgCtx is the resolver lifecycle context (used for
+// background enrichment, so it survives request cancellation but stops on
+// Shutdown).
+func createZone(ctx, bgCtx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {
 	name = dns.CanonicalName(name)
 	parent = dns.CanonicalName(parent)
 
@@ -24,8 +28,6 @@ func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS,
 	switch pool.status() {
 	case PrimedButNeedsEnhancing:
 		if !config.lazyEnrichment {
-			// Detach from the request context so caller cancellation does not abort background priming
-			bgCtx := context.WithoutCancel(ctx)
 			go func() {
 				if err := enrichPool(bgCtx, name, pool, exchanger, config); err != nil {
 					Log.Warningf("background enrichment failed for [%s]: %v", name, err)

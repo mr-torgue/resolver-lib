@@ -139,7 +139,7 @@ func TestTwoResolvers_ConcurrentZoneCreation(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			zonesOut[i], errs[i] = createZone(context.Background(), "example.com.", ".", nameservers, nil, exchangers[i], configs[i])
+			zonesOut[i], errs[i] = createZone(context.Background(), context.Background(), "example.com.", ".", nameservers, nil, exchangers[i], configs[i])
 		}(i)
 	}
 	wg.Wait()
@@ -226,9 +226,9 @@ func TestGlobalConfig_InterferenceBetweenResolvers(t *testing.T) {
 
 	// Two pools for two would-be resolvers; with one primed IP but < DesireNumberOfNameserversPerZone,
 	// the status is PrimedButNeedsEnhancing and createZone only enriches when the global LazyEnrichment is false.
-	z1, err1 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(false)))
+	z1, err1 := createZone(context.Background(), context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(false)))
 
-	z2, err2 := createZone(context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(true)))
+	z2, err2 := createZone(context.Background(), context.Background(), "example.com.", ".", nameservers, extra, workingExchanger, ConfigBuilder(WithLazyEnrichment(true)))
 
 	// Both calls succeed, but the global flag decided the behaviour for both resolvers alike.
 	require.NoError(t, err1)

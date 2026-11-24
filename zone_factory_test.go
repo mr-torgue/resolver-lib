@@ -9,6 +9,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateZone_SuccessWithoutEnrichment(t *testing.T) {
@@ -29,7 +30,7 @@ func TestCreateZone_SuccessWithoutEnrichment(t *testing.T) {
 	ctx := context.TODO()
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
+	z, err := createZone(ctx, context.Background(), "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.NoError(t, err)
@@ -52,7 +53,7 @@ func TestCreateZone_PoolCreationFailsWithoutEnrichment(t *testing.T) {
 	ctx := context.TODO()
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
+	z, err := createZone(ctx, context.Background(), "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.Nil(t, z)
@@ -85,7 +86,7 @@ func TestCreateZone_SuccessWithEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
+	z, err := createZone(ctx, context.Background(), "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// AssertionsOk
 	assert.NoError(t, err)
@@ -120,7 +121,7 @@ func TestCreateZone_PoolCreationFailsWithEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
+	z, err := createZone(ctx, context.Background(), "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// Assertions
 	assert.Nil(t, z)
@@ -155,7 +156,7 @@ func TestCreateZone_SuccessWithOptionalEnrichment(t *testing.T) {
 	})
 
 	// Execute
-	z, err := createZone(ctx, "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
+	z, err := createZone(ctx, context.Background(), "example.com.", "com.", nameservers, extra, mockExchanger, ConfigBuilder()) // default config
 
 	// AssertionsOk
 	assert.NoError(t, err)
@@ -174,4 +175,53 @@ func TestCreateZone_SuccessWithOptionalEnrichment(t *testing.T) {
 		}
 	}
 	assert.Equal(t, pool.status(), PoolPrimed)
+}
+
+// TestResolver_ShutdownCancelsBackgroundEnrichment verifies that background
+// pool enrichment runs on the resolver lifecycle context: it survives request
+// cancellation but is aborted by Shutdown.
+func TestResolver_ShutdownCancelsBackgroundEnrichment(t *testing.T) {
+	started := make(chan struct{}, 1)
+	cancelled := make(chan struct{}, 1)
+	blocking := &mockExchanger{mockExchange: func(ctx context.Context, qmsg *dns.Msg) *Response {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		select {
+		case cancelled <- struct{}{}:
+		default:
+		}
+		return &Response{Err: ctx.Err()}
+	}}
+
+	nameservers := []*dns.NS{
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns1.example.com."},
+		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns2.example.com."},
+	}
+	extra := []dns.RR{
+		&dns.A{Hdr: dns.RR_Header{Name: "ns1.example.com.", Rrtype: dns.TypeA, Ttl: 300}, A: net.ParseIP("192.0.2.53")},
+	}
+
+	resolver := NewResolver(ConfigBuilder())
+
+	z, err := resolver.funcs.createZone(context.Background(), "example.com.", ".", nameservers, extra, blocking, resolver.config)
+	require.NoError(t, err)
+	require.NotNil(t, z)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background enrichment did not start")
+	}
+
+	resolver.Shutdown()
+	resolver.Shutdown() // idempotent
+
+	select {
+	case <-cancelled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background enrichment was not cancelled by Shutdown")
+	}
 }
