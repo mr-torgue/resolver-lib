@@ -283,18 +283,6 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 		response.Auth, response.Doe, response.Err = auth.result()
 		Log.Infof("DNSSEC took %s to return an answer of %s and DOE %s", time.Since(authTime), response.Auth.String(), response.Doe.String())
 
-		// Records were inserted into the cache (as Indeterminate) before
-		// validation. Now that the outcome is known, mark all entries that
-		// make up this response: Secure/Insecure are served (AD is set for
-		// Secure), Bogus entries are removed so they are never served.
-		if resolver.config.cache != nil && response.Msg != nil {
-			if status, ok := cacheValidationStatus(response.Auth); ok {
-				if err := resolver.config.cache.UpdateValidation("", qmsg.Question[0], response.Msg, status); err != nil {
-					Log.Warningf("error trying to update validation status in cache: %w", err)
-				}
-			}
-		}
-
 		/*
 			   If the resolver accepts the RRset as authentic, the validator MUST
 			   set the TTL of the RRSIG RR and each RR in the authenticated RRset to
@@ -343,6 +331,26 @@ func (resolver *Resolver) finaliseResponse(ctx context.Context, auth *authentica
 				if rtypeTTL.found {
 					rr.Header().Ttl = min(rtypeTTL.ttl, rr.Header().Ttl)
 				}
+			}
+		}
+	}
+
+	//---
+
+	// Cache the response once, now that validation is done. The validation
+	// status is stored with the entries: Secure entries are served with the AD
+	// bit, and a Bogus response evicts any existing entries instead of being
+	// cached. When no validation was performed (no DO bit), entries are stored
+	// as Indeterminate and are not served to DO queries.
+	if resolver.config.cache != nil && response.Msg != nil && len(qmsg.Question) > 0 {
+		status := cache.Indeterminate
+		if s, ok := cacheValidationStatus(response.Auth); ok {
+			status = s
+		}
+		rcodeCacheable := response.Msg.Rcode == dns.RcodeSuccess || response.Msg.Rcode == dns.RcodeNameError
+		if status == cache.Bogus || (rcodeCacheable && !response.HasError()) {
+			if err := resolver.config.cache.Update(qmsg.Question[0], response.Msg, status); err != nil {
+				Log.Warningf("error trying to update cache after validation: %w", err)
 			}
 		}
 	}

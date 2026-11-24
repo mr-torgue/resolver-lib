@@ -1103,7 +1103,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
-	_, err := resolver.config.cache.Get("", qmsg)
+	_, err := resolver.config.cache.Get(qmsg)
 	assert.Nil(t, err)
 
 	// test with DNSSEC domain
@@ -1120,7 +1120,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond)
-	_, err = resolver.config.cache.Get("", qmsg)
+	_, err = resolver.config.cache.Get(qmsg)
 	assert.Nil(t, err)
 }
 
@@ -1226,7 +1226,7 @@ func TestResolver_Cache_Validation(t *testing.T) {
 
 	// The cache entry must now be validated: a DO query against the cache
 	// directly must be served with AD, not rejected as unvalidated.
-	cached, err := resolver.config.cache.Get("", qmsg)
+	cached, err := resolver.config.cache.Get(qmsg)
 	require.NoError(t, err)
 	assert.True(t, cached.AuthenticatedData)
 	assert.Equal(t, dns.RcodeSuccess, cached.Rcode)

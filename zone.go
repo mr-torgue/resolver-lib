@@ -69,7 +69,7 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 	z.calls.Add(1)
 
 	if z.config.cache != nil {
-		if msg, err := z.config.cache.Get(z.zoneName, m); err != nil {
+		if msg, err := z.config.cache.Get(m); err != nil {
 			if !errors.Is(err, cache.ErrCacheMiss) && !errors.Is(err, cache.ErrCacheExpired) && !errors.Is(err, cache.ErrNotValidated) {
 				Log.Warningf("error trying to perform a cache lookup for zone [%s]: %w", z.zoneName, err)
 			}
@@ -102,19 +102,8 @@ func (z *zoneImpl) exchange(ctx context.Context, m *dns.Msg) *Response {
 	response := z.pool.exchange(ctx, m)
 
 	//---
-
-	if z.config.cache != nil && !response.IsEmpty() && !response.HasError() {
-		// Insert synchronously (as Indeterminate) so that the post-validation
-		// UpdateValidation in finaliseResponse always finds the entries.
-		// We never cache OPT records.
-		msg := response.Msg.Copy()
-		msg.Extra = removeRecordsOfType(msg.Extra, dns.TypeOPT)
-		if err := z.config.cache.Update(z.zoneName, m.Question[0], msg); err != nil {
-			Log.Warningf("error trying to perform a cache update for zone [%s]: %w", z.zoneName, err)
-		}
-	}
-
-	//---
+	// Note: responses are not cached here. Caching happens once, after
+	// validation, in finaliseResponse (resolver_exchange.go).
 
 	return response
 }

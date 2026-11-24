@@ -333,13 +333,13 @@ func TestCacheInsertion(t *testing.T) {
 
 			m := tc.in.Msg()
 			m = cacheMsg(m, tc.in)
-			c.UpdateWithTime("", m.Question[0], m, now)
+			c.UpdateWithTime(m.Question[0], m, Indeterminate, now)
 			if tc.in.Do {
 				// A DO query is only served validated entries, so simulate the
 				// post-validation update that the resolver performs.
-				c.UpdateValidationWithTime("", m.Question[0], m, Secure, now)
+				c.UpdateWithTime(m.Question[0], m, Secure, now)
 			}
-			resp, err := c.GetWithTime("", m, now)
+			resp, err := c.GetWithTime(m, now)
 			//require.Nil(t, err)
 			found := err == nil
 
@@ -410,14 +410,14 @@ func TestCacheValidationGate(t *testing.T) {
 	qDO := queryMsg("secure.example.", dns.TypeA, true)
 	qNoDO := queryMsg("secure.example.", dns.TypeA, false)
 
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
 	// DO query must not be served an unvalidated entry.
-	_, err := c.GetWithTime("", qDO, now)
+	_, err := c.GetWithTime(qDO, now)
 	assert.ErrorIs(t, err, ErrNotValidated)
 
 	// Non-DO query is served, but without AD.
-	resp, err := c.GetWithTime("", qNoDO, now)
+	resp, err := c.GetWithTime(qNoDO, now)
 	require.NoError(t, err)
 	assert.False(t, resp.AuthenticatedData)
 	assert.Equal(t, 1, len(resp.Answer))
@@ -426,35 +426,35 @@ func TestCacheValidationGate(t *testing.T) {
 	// CD bit disables the gate.
 	qCD := queryMsg("secure.example.", dns.TypeA, true)
 	qCD.CheckingDisabled = true
-	resp, err = c.GetWithTime("", qCD, now)
+	resp, err = c.GetWithTime(qCD, now)
 	require.NoError(t, err)
 	assert.False(t, resp.AuthenticatedData)
 
 	// After validation, the entry is served to DO queries with AD set.
-	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Secure, now))
-	resp, err = c.GetWithTime("", qDO, now)
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Secure, now))
+	resp, err = c.GetWithTime(qDO, now)
 	require.NoError(t, err)
 	assert.True(t, resp.AuthenticatedData)
 	assert.Equal(t, dns.RcodeSuccess, resp.Rcode)
 	assert.Equal(t, 1, len(resp.Answer))
 
 	// Insecure is served, but without AD.
-	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Insecure, now))
-	resp, err = c.GetWithTime("", qDO, now)
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Insecure, now))
+	resp, err = c.GetWithTime(qDO, now)
 	require.NoError(t, err)
 	assert.False(t, resp.AuthenticatedData)
 
 	// Bogus entries are removed and never served.
-	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Bogus, now))
-	_, err = c.GetWithTime("", qDO, now)
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Bogus, now))
+	_, err = c.GetWithTime(qDO, now)
 	assert.ErrorIs(t, err, ErrCacheMiss)
-	_, err = c.GetWithTime("", qNoDO, now)
+	_, err = c.GetWithTime(qNoDO, now)
 	assert.ErrorIs(t, err, ErrCacheMiss)
 
 	// Safety net: even a manually inserted Bogus entry is not served.
 	k := Key("secure.example.", dns.TypeA)
 	c.cache.Add(k, &Entry{Name: "secure.example.", Type: dns.TypeA, Status: Bogus, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("secure.example. 3600 IN A 127.0.0.1")}, TTL: 3600, Expires: now.Add(time.Hour)})
-	_, err = c.GetWithTime("", qNoDO, now)
+	_, err = c.GetWithTime(qNoDO, now)
 	assert.ErrorIs(t, err, ErrCacheMiss)
 }
 
@@ -471,12 +471,12 @@ func TestCacheNoDowngradeOfValidatedEntry(t *testing.T) {
 	m := cacheMsg(in.Msg(), in)
 	qDO := queryMsg("node.example.", dns.TypeA, true)
 
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
-	require.NoError(t, c.UpdateValidationWithTime("", m.Question[0], m, Secure, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Secure, now))
 	// A second, unvalidated update arrives (e.g. concurrent query).
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
-	resp, err := c.GetWithTime("", qDO, now)
+	resp, err := c.GetWithTime(qDO, now)
 	require.NoError(t, err)
 	assert.True(t, resp.AuthenticatedData)
 }
@@ -492,13 +492,13 @@ func TestCacheKeyIdentityCheck(t *testing.T) {
 	// Simulate a collision: an entry stored under the same key, but for another name.
 	c.cache.Add(k, &Entry{Name: "other.example.", Type: dns.TypeA, Status: Secure, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("other.example. 3600 IN A 127.0.0.2")}, TTL: 3600, Expires: now.Add(time.Hour)})
 
-	_, err := c.GetWithTime("", q, now)
+	_, err := c.GetWithTime(q, now)
 	assert.ErrorIs(t, err, ErrCacheMiss)
 
 	// Case-insensitive match of the same name must hit.
 	q2 := queryMsg("ViCtIm.ExAmPlE.", dns.TypeA, false)
 	c.cache.Add(k, &Entry{Name: "victim.example.", Type: dns.TypeA, Status: Insecure, Rcode: dns.RcodeSuccess, Records: []dns.RR{test.A("victim.example. 3600 IN A 127.0.0.1")}, TTL: 3600, Expires: now.Add(time.Hour)})
-	resp, err := c.GetWithTime("", q2, now)
+	resp, err := c.GetWithTime(q2, now)
 	require.NoError(t, err)
 	assert.Equal(t, 1, len(resp.Answer))
 }
@@ -514,15 +514,15 @@ func TestCacheTTLDecrementAndExpiry(t *testing.T) {
 		Answer: []dns.RR{test.A("ttl.example. 3600 IN A 127.0.0.1")},
 	}
 	m := cacheMsg(in.Msg(), in)
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
 	q := queryMsg("ttl.example.", dns.TypeA, false)
 
-	resp, err := c.GetWithTime("", q, now.Add(100*time.Second))
+	resp, err := c.GetWithTime(q, now.Add(100*time.Second))
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3500), resp.Answer[0].Header().Ttl)
 
-	_, err = c.GetWithTime("", q, now.Add(3601*time.Second))
+	_, err = c.GetWithTime(q, now.Add(3601*time.Second))
 	assert.ErrorIs(t, err, ErrCacheExpired)
 }
 
@@ -539,21 +539,21 @@ func TestCacheCopiesRecords(t *testing.T) {
 	m.Answer[0] = test.A("copy.example. 3600 IN A 127.0.0.1")
 	m.Ns = []dns.RR{test.NS("copy.example. 3600 IN NS ns1.copy.example.")}
 
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
 	// Mutating the source message after insert must not affect the cache.
 	m.Answer[0].Header().Ttl = 1
 	assert.Equal(t, 1, len(m.Answer), "answer section of the source message must not be clobbered")
 
 	q := queryMsg("copy.example.", dns.TypeA, false)
-	resp, err := c.GetWithTime("", q, now)
+	resp, err := c.GetWithTime(q, now)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(resp.Answer))
 	assert.Equal(t, uint32(3600), resp.Answer[0].Header().Ttl)
 
 	// Mutating a served message must not affect the cache either.
 	resp.Answer[0].Header().Ttl = 5
-	resp2, err := c.GetWithTime("", q, now)
+	resp2, err := c.GetWithTime(q, now)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3600), resp2.Answer[0].Header().Ttl)
 }
@@ -581,10 +581,10 @@ func TestCacheNegativeResponse(t *testing.T) {
 				Ns: []dns.RR{test.SOA("example. 3600 IN SOA ns1.example. hostmaster.example. 1 7200 3600 1209600 300")},
 			}
 			m := cacheMsg(in.Msg(), in)
-			require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+			require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
 			q := queryMsg(tt.qname, dns.TypeA, false)
-			resp, err := c.GetWithTime("", q, now)
+			resp, err := c.GetWithTime(q, now)
 			require.NoError(t, err)
 			assert.Equal(t, tt.rcode, resp.Rcode)
 			assert.Equal(t, 0, len(resp.Answer))
@@ -606,7 +606,7 @@ func TestCacheRcodeRecorded(t *testing.T) {
 		Ns:    []dns.RR{test.SOA("example. 3600 IN SOA ns1.example. hostmaster.example. 1 7200 3600 1209600 300")},
 	}
 	m := cacheMsg(in.Msg(), in)
-	require.NoError(t, c.UpdateWithTime("", m.Question[0], m, now))
+	require.NoError(t, c.UpdateWithTime(m.Question[0], m, Indeterminate, now))
 
 	k := Key("rc.example.", dns.TypeA)
 	val, ok := c.cache.Get(k)

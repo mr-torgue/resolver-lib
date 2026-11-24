@@ -123,6 +123,26 @@ func splitRRsets(msg *dns.Msg, now time.Time) (rrsets map[uint64][]dns.RR, sigs 
 	return rrsets, sigs, badSigs
 }
 
+// msgKeys returns the question key plus the key of every RRset in msg.
+func msgKeys(question dns.Question, msg *dns.Msg) []uint64 {
+	keys := map[uint64]bool{Key(question.Name, question.Qtype): true}
+	if msg != nil {
+		for _, rr := range sectionRRs(msg) {
+			h := rr.Header()
+			if h.Rrtype == dns.TypeRRSIG {
+				keys[Key(h.Name, rr.(*dns.RRSIG).TypeCovered)] = true
+			} else if !ignoredType(h.Rrtype) {
+				keys[Key(h.Name, h.Rrtype)] = true
+			}
+		}
+	}
+	out := make([]uint64, 0, len(keys))
+	for k := range keys {
+		out = append(out, k)
+	}
+	return out
+}
+
 // minTTL returns the smallest TTL found in the given record sets, or 0 if all
 // sets are empty.
 func minTTL(sets ...[]dns.RR) uint32 {
@@ -166,17 +186,24 @@ func (c *Cache) addEntry(k uint64, name string, rrtype uint16, records, signatur
 	})
 }
 
-// UpdateWithTime inserts a dns message into the cache as Indeterminate
-// (pending validation). It splits the message into resource records for better
+// UpdateWithTime inserts a dns message into the cache with the given
+// validation status. It splits the message into resource records for better
 // granularity. Negative responses (NXDOMAIN / NODATA) are cached under the
-// question key. Call UpdateValidationWithTime once the message has been
-// validated to mark the entries Secure, Insecure or Bogus.
-func (c *Cache) UpdateWithTime(zone string, question dns.Question, msg *dns.Msg, now time.Time) error {
+// question key. If status is Bogus, no records are inserted and any existing
+// entries for the message's keys are evicted: bogus data must never be served.
+func (c *Cache) UpdateWithTime(question dns.Question, msg *dns.Msg, status ValidationStatus, now time.Time) error {
 	if msg == nil || len(msg.Question) == 0 {
 		return ErrEmptyQuestion
 	}
 	if msg.Truncated {
 		return ErrCacheNoTruncated
+	}
+
+	if status == Bogus {
+		for _, k := range msgKeys(question, msg) {
+			c.cache.Remove(k)
+		}
+		return nil
 	}
 
 	rrsets, sigs, badSigs := splitRRsets(msg, now)
@@ -188,7 +215,7 @@ func (c *Cache) UpdateWithTime(zone string, question dns.Question, msg *dns.Msg,
 			continue
 		}
 		h := records[0].Header()
-		c.addEntry(k, h.Name, h.Rrtype, records, sigs[k], msg.Rcode, false, minTTL(records, sigs[k]), Indeterminate, now)
+		c.addEntry(k, h.Name, h.Rrtype, records, sigs[k], msg.Rcode, false, minTTL(records, sigs[k]), status, now)
 	}
 
 	// Negative caching: cache NXDOMAIN / NODATA responses under the question
@@ -219,52 +246,15 @@ func (c *Cache) UpdateWithTime(zone string, question dns.Question, msg *dns.Msg,
 			auth = append(auth, dns.Copy(rr))
 		}
 		if len(auth) > 0 {
-			c.addEntry(Key(question.Name, question.Qtype), question.Name, question.Qtype, auth, authSigs, msg.Rcode, true, minTTL(auth, authSigs), Indeterminate, now)
+			c.addEntry(Key(question.Name, question.Qtype), question.Name, question.Qtype, auth, authSigs, msg.Rcode, true, minTTL(auth, authSigs), status, now)
 		}
 	}
 	return nil
 }
 
 // Update uses time.now() for convenience.
-func (c *Cache) Update(zone string, question dns.Question, msg *dns.Msg) error {
-	return c.UpdateWithTime(zone, question, msg, time.Now())
-}
-
-// UpdateValidationWithTime records the validation outcome for the cache entry
-// of the question and for every RRset entry that makes up msg. Bogus entries
-// are removed: bogus data must never be served from the cache.
-func (c *Cache) UpdateValidationWithTime(zone string, question dns.Question, msg *dns.Msg, status ValidationStatus, now time.Time) error {
-	if question.Name == "" {
-		return ErrEmptyQuestion
-	}
-	keys := map[uint64]bool{Key(question.Name, question.Qtype): true}
-	if msg != nil {
-		for _, rr := range sectionRRs(msg) {
-			h := rr.Header()
-			if h.Rrtype == dns.TypeRRSIG {
-				keys[Key(h.Name, rr.(*dns.RRSIG).TypeCovered)] = true
-			} else if !ignoredType(h.Rrtype) {
-				keys[Key(h.Name, h.Rrtype)] = true
-			}
-		}
-	}
-	for k := range keys {
-		if status == Bogus {
-			c.cache.Remove(k)
-			continue
-		}
-		if val, ok := c.cache.Get(k); ok && val != nil {
-			updated := *val
-			updated.Status = status
-			c.cache.Add(k, &updated)
-		}
-	}
-	return nil
-}
-
-// UpdateValidation uses time.now() for convenience.
-func (c *Cache) UpdateValidation(zone string, question dns.Question, msg *dns.Msg, status ValidationStatus) error {
-	return c.UpdateValidationWithTime(zone, question, msg, status, time.Now())
+func (c *Cache) Update(question dns.Question, msg *dns.Msg, status ValidationStatus) error {
+	return c.UpdateWithTime(question, msg, status, time.Now())
 }
 
 // copyRRs returns deep copies of rrs with each TTL decremented by elapsed
@@ -288,7 +278,7 @@ func copyRRs(rrs []dns.RR, elapsed uint32) []dns.RR {
 }
 
 // Get returns an item from cache.
-func (c *Cache) GetWithTime(zone string, qmsg *dns.Msg, now time.Time) (*dns.Msg, error) {
+func (c *Cache) GetWithTime(qmsg *dns.Msg, now time.Time) (*dns.Msg, error) {
 	if qmsg == nil || len(qmsg.Question) == 0 {
 		return nil, ErrEmptyQuestion
 	}
@@ -356,8 +346,8 @@ func (c *Cache) GetWithTime(zone string, qmsg *dns.Msg, now time.Time) (*dns.Msg
 }
 
 // Get returns an item from cache.
-func (c *Cache) Get(zone string, qmsg *dns.Msg) (*dns.Msg, error) {
-	return c.GetWithTime(zone, qmsg, time.Now())
+func (c *Cache) Get(qmsg *dns.Msg) (*dns.Msg, error) {
+	return c.GetWithTime(qmsg, time.Now())
 }
 
 // Len returns the cache length.
