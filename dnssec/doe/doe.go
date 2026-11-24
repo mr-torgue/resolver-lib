@@ -2,7 +2,8 @@ package doe
 
 import (
 	"context"
-	"github.com/mr-torgue/dns"
+
+	"github.com/miekg/dns"
 )
 
 type DenialOfExistenceNSEC struct {

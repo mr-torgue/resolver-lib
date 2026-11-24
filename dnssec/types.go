@@ -3,7 +3,7 @@ package dnssec
 import (
 	"context"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 type Zone interface {

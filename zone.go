@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 //---------------------------------------------------------------------------------

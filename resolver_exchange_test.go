@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"crypto"
 	"errors"
 	"net"
 	"regexp"
@@ -10,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,7 +172,7 @@ func TestResolver_Exchange_ValidDNSSEC(t *testing.T) {
 	sig.SignerName = key.Hdr.Name
 	sig.Algorithm = dns.ECDSAP256SHA256
 
-	if sig.Sign(privkey, []dns.RR{srv}) != nil {
+	if sig.Sign(privkey.(crypto.Signer), []dns.RR{srv}) != nil {
 		t.Fatal("failure to sign the record")
 	}
 	rmsg := qmsg.SetReply(qmsg)

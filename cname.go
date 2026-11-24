@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func cname(ctx context.Context, qmsg *dns.Msg, r *Response, exchanger exchanger, udpsize uint16) error {

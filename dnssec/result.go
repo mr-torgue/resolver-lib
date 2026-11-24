@@ -1,7 +1,7 @@
 package dnssec
 
 import (
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func (a *Authenticator) Result() (AuthenticationResult, DenialOfExistenceState, error) {

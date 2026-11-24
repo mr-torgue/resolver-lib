@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func verifyRRSETs(ctx context.Context, r *result, keys []*dns.DNSKEY, requireAllSignaturesValid bool) (AuthenticationResult, error) {

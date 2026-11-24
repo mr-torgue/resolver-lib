@@ -1,9 +1,10 @@
 package doe
 
 import (
-	"github.com/mr-torgue/dns"
 	"strconv"
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
 // wildcardName replaces the first label with `*`

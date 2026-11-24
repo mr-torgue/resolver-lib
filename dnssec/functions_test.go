@@ -1,9 +1,10 @@
 package dnssec
 
 import (
-	"github.com/mr-torgue/dns"
 	"slices"
 	"testing"
+
+	"github.com/miekg/dns"
 )
 
 func TestFunctions_SetFiltering(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func verifyDNSKEYs(ctx context.Context, r *result, keys []dns.RR, dsRecordsFromParent []*dns.DS, requireAllSignaturesValid bool) (AuthenticationResult, error) {

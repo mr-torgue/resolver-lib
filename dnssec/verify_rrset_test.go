@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func TestVerify_RRSETs(t *testing.T) {

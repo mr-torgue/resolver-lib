@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func NewAuth(ctx context.Context, question dns.Question, opts ...Option) *Authenticator {

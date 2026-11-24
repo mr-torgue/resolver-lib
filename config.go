@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/cache"
 	"github.com/mr-torgue/resolver-lib/log"
 )

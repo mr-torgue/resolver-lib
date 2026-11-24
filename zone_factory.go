@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func createZone(ctx context.Context, name, parent string, nameservers []*dns.NS, extra []dns.RR, exchanger exchanger, config *Config) (zone, error) {

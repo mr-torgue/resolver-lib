@@ -3,7 +3,7 @@ package dnssec
 import (
 	"fmt"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 )
 
 func (ss signatures) filterOnType(rtype uint16) signatures {

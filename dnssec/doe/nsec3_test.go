@@ -2,9 +2,10 @@ package doe
 
 import (
 	"context"
-	"github.com/mr-torgue/dns"
 	"slices"
 	"testing"
+
+	"github.com/miekg/dns"
 )
 
 type testNsec3RRSets struct {

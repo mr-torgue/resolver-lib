@@ -2,8 +2,9 @@ package resolver
 
 import (
 	"fmt"
-	"github.com/mr-torgue/dns"
 	"slices"
+
+	"github.com/miekg/dns"
 )
 
 // domain represents a domain name with utilities for traversing its labels.

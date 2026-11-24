@@ -2,9 +2,10 @@ package dnssec
 
 import (
 	"context"
-	"github.com/mr-torgue/dns"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/miekg/dns"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVerify_PositiveResponse(t *testing.T) {

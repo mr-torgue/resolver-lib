@@ -2,8 +2,9 @@ package dnssec
 
 import (
 	"fmt"
-	"github.com/mr-torgue/dns"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 func authenticate(zone string, rrsets []dns.RR, dnskeys []*dns.DNSKEY, section section) (signatures, error) {

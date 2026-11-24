@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/clients"
 )
 

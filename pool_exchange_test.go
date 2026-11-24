@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mr-torgue/dns"
+	"github.com/miekg/dns"
 	"github.com/stretchr/testify/assert"
 )
 
