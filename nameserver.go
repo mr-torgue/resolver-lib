@@ -37,31 +37,45 @@ type nameserver struct {
 	numberOfTcpRequests uint32
 	protocolRatio       float32
 
-	// negative cache: set when a DoQ/DoT attempt against this address fails
-	doqFailed atomic.Bool
-	dotFailed atomic.Bool
-
-	config *Config // make sure that this config points to the same as resolver
+	// negative cache: set when a DoQ/DoT setup against this address fails.
+	// the blacklisting expires after protoBlacklistInterval, so a nameserver
+	// that starts (or stops) offering the protocol is eventually retried.
+	doqFailedUntil atomic.Int64 // unix nanoseconds until which DoQ is skipped
+	dotFailedUntil atomic.Int64 // unix nanoseconds until which DoT is skipped
+	config         *Config      // make sure that this config points to the same as resolver
 }
+
+// protoBlacklistInterval is how long a protocol blacklisted for this
+// nameserver stays blacklisted. Errors like 'no DoT on this address' are
+// sticky, but servers can change, so we retry the protocol once a day.
+const protoBlacklistInterval = 24 * time.Hour
 
 // protoSkipped reports whether a protocol should be skipped for this nameserver.
 // udp/tcp are never skipped (they're cheap to try).
 func (n *nameserver) protoSkipped(protocol string) bool {
 	switch protocol {
 	case "doq":
-		return n.doqFailed.Load()
+		return time.Now().UnixNano() < n.doqFailedUntil.Load()
 	case "dot":
-		return n.dotFailed.Load()
+		return time.Now().UnixNano() < n.dotFailedUntil.Load()
 	}
 	return false
 }
 
 func (n *nameserver) markProto(protocol string, failed bool) {
+	var failedUntil *atomic.Int64
 	switch protocol {
 	case "doq":
-		n.doqFailed.Store(failed)
+		failedUntil = &n.doqFailedUntil
 	case "dot":
-		n.dotFailed.Store(failed)
+		failedUntil = &n.dotFailedUntil
+	default:
+		return
+	}
+	if failed {
+		failedUntil.Store(time.Now().Add(protoBlacklistInterval).UnixNano())
+	} else {
+		failedUntil.Store(0) // success: clear the blacklist
 	}
 }
 

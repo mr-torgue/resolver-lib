@@ -824,6 +824,10 @@ func TestExchange_DoQSetupErrorBlacklists(t *testing.T) {
 	require.NotNil(t, rsp)
 	assert.ErrorIs(t, rsp.Err, clients.ErrNoDoQ)
 	assert.True(t, ns.protoSkipped("doq"), "a setup failure should blacklist DoQ")
+
+	// The blacklist must be recorded with the 24h expiry...
+	expiry := time.Unix(0, ns.doqFailedUntil.Load())
+	assert.InDelta(t, time.Now().Add(protoBlacklistInterval).UnixNano(), expiry.UnixNano(), float64(time.Minute))
 }
 
 // A DoT setup failure (TCP connection could not be established) is a
@@ -875,4 +879,44 @@ func TestExchange_DoTErrorClassification(t *testing.T) {
 		assert.ErrorIs(t, rsp.Err, readErr)
 		assert.False(t, ns.protoSkipped("dot"), "a post-connection failure may be transient and must not blacklist DoT")
 	})
+}
+
+// The protocol blacklist is a negative cache, not a permanent verdict: it
+// must expire, so a nameserver that starts offering DoQ/DoT is retried
+// eventually. A success clears it right away.
+func TestExchange_BlacklistExpiry(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	// Blacklist DoQ...
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), fmt.Errorf("%w: %w", clients.ErrNoDoQ, errors.New("handshake timeout")))
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.True(t, ns.protoSkipped("doq"))
+
+	// ...but an entry that is older than the expiry window no longer skips.
+	ns.doqFailedUntil.Store(time.Now().Add(-time.Second).UnixNano())
+	assert.False(t, ns.protoSkipped("doq"), "an expired blacklist entry must not skip the protocol")
+
+	// Once the blacklist has expired and the protocol works again, the
+	// blacklist entry is cleared.
+	good := new(dns.Msg)
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return(good, time.Duration(0), nil)
+	ns.doqFailedUntil.Store(time.Now().Add(-time.Second).UnixNano()) // expired: DoQ is tried again
+	rsp = ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.NoError(t, rsp.Err)
+	assert.False(t, ns.protoSkipped("doq"), "a success must clear the blacklist")
+	assert.Zero(t, ns.doqFailedUntil.Load())
 }
