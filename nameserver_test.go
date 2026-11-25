@@ -13,6 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/clients"
+	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -758,4 +759,120 @@ func Test_exchange_dnstestdev(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Reproduces the flaky Test_exchange_dnstestdev [DOQ] cascade: a single
+// transient, server-side stream reset (quic.StreamError{Remote:true}) used to
+// permanently blacklist DoQ for the nameserver, so every following query
+// skipped the protocol and failed immediately with a nil message.
+func TestExchange_TransientDoQErrorDoesNotBlacklist(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	// The server resets the stream: transient, not evidence that DoQ is unsupported.
+	streamErr := &quic.StreamError{StreamID: 0, ErrorCode: 0x5, Remote: true}
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), streamErr)
+
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.ErrorIs(t, rsp.Err, streamErr)
+	assert.False(t, ns.protoSkipped("doq"), "a transient stream error must not blacklist DoQ")
+
+	// The next query must still use DoQ and succeed.
+	good := new(dns.Msg)
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return(good, time.Duration(0), nil)
+
+	msg2 := new(dns.Msg)
+	msg2.SetQuestion("example.org.", dns.TypeA)
+	rsp = ns.exchange(ctx, msg2)
+	require.NotNil(t, rsp)
+	assert.NoError(t, rsp.Err)
+	assert.NotNil(t, rsp.Msg, "a transient error must not disable DoQ for subsequent queries")
+}
+
+// A DoQ setup failure (no QUIC session could be established) must blacklist
+// the protocol for this nameserver, so we don't pay the dial timeout again.
+func TestExchange_DoQSetupErrorBlacklists(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), fmt.Errorf("%w: %w", clients.ErrNoDoQ, errors.New("handshake timeout")))
+
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.ErrorIs(t, rsp.Err, clients.ErrNoDoQ)
+	assert.True(t, ns.protoSkipped("doq"), "a setup failure should blacklist DoQ")
+}
+
+// A DoT setup failure (TCP connection could not be established) is a
+// permanent signal; a post-connection failure may be transient.
+func TestExchange_DoTErrorClassification(t *testing.T) {
+
+	t.Run("dial error blacklists DoT", func(t *testing.T) {
+		mockClient := new(MockDNSClient)
+		factory := func(protocol string) dnsClient {
+			return mockClient
+		}
+		config := ConfigBuilder(WithClient("dot", false))
+		ns := newNameserver("example.net.", "192.0.2.1", config)
+		ns.dnsClientFactory = factory
+
+		ctx := context.TODO()
+		msg := new(dns.Msg)
+		msg.SetQuestion("example.com.", dns.TypeA)
+
+		dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
+		mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+			Return((*dns.Msg)(nil), time.Duration(0), dialErr)
+
+		rsp := ns.exchange(ctx, msg)
+		require.NotNil(t, rsp)
+		assert.ErrorIs(t, rsp.Err, dialErr)
+		assert.True(t, ns.protoSkipped("dot"), "a dial failure should blacklist DoT")
+	})
+
+	t.Run("read error does not blacklist DoT", func(t *testing.T) {
+		mockClient := new(MockDNSClient)
+		factory := func(protocol string) dnsClient {
+			return mockClient
+		}
+		config := ConfigBuilder(WithClient("dot", false))
+		ns := newNameserver("example.net.", "192.0.2.1", config)
+		ns.dnsClientFactory = factory
+
+		ctx := context.TODO()
+		msg := new(dns.Msg)
+		msg.SetQuestion("example.com.", dns.TypeA)
+
+		readErr := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("i/o timeout")}
+		mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+			Return((*dns.Msg)(nil), time.Duration(0), readErr)
+
+		rsp := ns.exchange(ctx, msg)
+		require.NotNil(t, rsp)
+		assert.ErrorIs(t, rsp.Err, readErr)
+		assert.False(t, ns.protoSkipped("dot"), "a post-connection failure may be transient and must not blacklist DoT")
+	})
 }

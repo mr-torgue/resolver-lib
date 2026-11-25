@@ -3,7 +3,9 @@ package resolver
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +63,30 @@ func (n *nameserver) markProto(protocol string, failed bool) {
 	case "dot":
 		n.dotFailed.Store(failed)
 	}
+}
+
+// protoSetupError reports whether an exchange error indicates that the address
+// does not offer the protocol at all (e.g. the DoQ/DoT session could not be
+// established), rather than a transient, query-level failure such as a
+// server-side stream reset or a read timeout. Only setup errors may blacklist
+// the protocol for this server: a transient error must not disable it
+// permanently, otherwise a single hiccup takes the protocol out for the
+// lifetime of the nameserver and every following query fails immediately.
+func protoSetupError(protocol string, err error) bool {
+	switch protocol {
+	case "doq":
+		// A DoQ error is only a setup error if the QUIC session could not be
+		// established (server does not speak DoQ/QUIC on this address).
+		// Once a session existed, the error (stream reset, read timeout)
+		// came from the server and may be transient.
+		return errors.Is(err, clients.ErrNoDoQ)
+	case "dot":
+		// A DoT error is only a setup error if the TCP connection could not
+		// be established. Once connected, the failure may be transient.
+		var opErr *net.OpError
+		return errors.As(err, &opErr) && opErr.Op == "dial"
+	}
+	return false
 }
 
 // Todo: use same tlsconfig for doq and dot to reuse code.
@@ -191,7 +217,10 @@ func (nameserver *nameserver) exchange(ctx context.Context, m *dns.Msg) *Respons
 
 		// If we got an error back, we'll continue to maybe try again.
 		if r.HasError() {
-			nameserver.markProto(protocol, true) // blacklist protocol for this server
+			if protoSetupError(protocol, r.Err) {
+				// The address does not offer this protocol: blacklist it for this server.
+				nameserver.markProto(protocol, true)
+			}
 			continue
 		}
 		nameserver.markProto(protocol, false) // success: clear the flag
