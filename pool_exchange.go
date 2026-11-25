@@ -59,6 +59,9 @@ func (pool *nameserverPool) exchange(ctx context.Context, m *dns.Msg) *Response 
 		if response.HasError() {
 			// If we already had an error, we'll wrap it with this one.
 			response.Err = fmt.Errorf("%w: %w", response.Err, err)
+		} else if response == nil {
+			// No server was available, so there is no response to attach the error to.
+			response = newResponseError(err)
 		} else {
 			response.Err = err
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +13,13 @@ import (
 	"github.com/miekg/dns"
 	"github.com/quic-go/quic-go"
 )
+
+// ErrNoDoQ indicates that a QUIC session could not be established with the
+// address, i.e. the server does not appear to offer DoQ (or QUIC at all).
+// It allows callers to distinguish setup failures (the protocol is not
+// available there) from transient, query-level failures, such as a
+// server-side stream reset or a read timeout.
+var ErrNoDoQ = errors.New("unable to establish a QUIC session: server may not offer DoQ")
 
 // DOQClient represents the config options for setting up a DOQ based client.
 type DOQClient struct {
@@ -32,7 +40,7 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 
 	// NOTE: is there a simpler way to detect if a server supports QUIC instead of relying on timeouts?
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("%w: %w", ErrNoDoQ, err)
 	}
 	defer session.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
 	// ref: https://www.rfc-editor.org/rfc/rfc9250.html#name-dns-message-ids
