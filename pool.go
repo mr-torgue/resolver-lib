@@ -20,12 +20,12 @@ const (
 )
 
 type nameserverPool struct {
-	// hosts contains the canonical hostnames of all nameservers for this zone.
-	hosts []string
-
 	// hostsWithoutAddresses contains the hostnames of nameservers for which
 	// no address has been seen yet. Once an address is found (any family),
-	// they're removed from this list, but remain eligible for enrichment via hosts.
+	// they're removed from this list. Membership of a hostname (and thus
+	// eligibility for enrichment) is derived from this list together with the
+	// addresses already stored in pool.ipv4 / pool.ipv6, so no separate list
+	// of all nameserver hostnames needs to be kept.
 	hostsWithoutAddresses []string
 
 	ipv4      []exchanger
@@ -140,8 +140,6 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 	for _, rr := range nameservers {
 		hostname := canonicalName(rr.Ns)
 
-		pool.hosts = append(pool.hosts, hostname)
-
 		ttl = min(rr.Header().Ttl, ttl)
 
 		//---
@@ -167,7 +165,6 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 
 	}
 
-	pool.hosts = slices.Clip(slices.Compact(pool.hosts))
 	pool.hostsWithoutAddresses = slices.Clip(pool.hostsWithoutAddresses)
 
 	expires := time.Now().Add(time.Duration(ttl) * time.Second)
@@ -179,12 +176,13 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 }
 
 // enrich adds address records for this zone's nameservers to the pool.
-// Records are accepted for every known nameserver hostname (pool.hosts),
-// regardless of the order in which the A/AAAA responses arrive. Without this,
-// a hostname was removed from hostsWithoutAddresses as soon as one address
-// family was found, silently discarding the other family's records that
-// arrived later (e.g. leaving a zone with IPv6-only nameservers, which are
-// unreachable on hosts without IPv6 connectivity).
+// Records are accepted regardless of the order in which the A/AAAA responses
+// arrive: a hostname is one of this zone's nameservers if it is still pending
+// (hostsWithoutAddresses) or if we already store an address for it. Without
+// this, a hostname was removed from hostsWithoutAddresses as soon as one
+// address family was found, silently discarding the other family's records
+// that arrived later (e.g. leaving a zone with IPv6-only nameservers, which
+// are unreachable on hosts without IPv6 connectivity).
 func (pool *nameserverPool) enrich(records []dns.RR) {
 	if len(records) == 0 {
 		return
@@ -210,7 +208,7 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 		}
 
 		hostname := canonicalName(rr.Header().Name)
-		if !slices.Contains(pool.hosts, hostname) {
+		if !pool.nameserverHostnameKnown(hostname) {
 			// Not one of this zone's nameservers.
 			continue
 		}
@@ -242,6 +240,19 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 
 // hostResolved reports whether hostname has at least one address in the pool.
 func (pool *nameserverPool) hostResolved(hostname string) bool {
+	return pool.hostAddressKnown(hostname, "")
+}
+
+// nameserverHostnameKnown reports whether hostname belongs to this zone's
+// nameservers, without keeping a separate list of them: it is either still
+// waiting for its first address, or we already store an address for it (in
+// which case the other address family can still be added).
+func (pool *nameserverPool) nameserverHostnameKnown(hostname string) bool {
+	for _, pending := range pool.hostsWithoutAddresses {
+		if pending == hostname {
+			return true
+		}
+	}
 	return pool.hostAddressKnown(hostname, "")
 }
 
