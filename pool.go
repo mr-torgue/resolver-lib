@@ -169,6 +169,14 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 	return pool
 }
 
+// enrich adds address records for this zone's nameservers to the pool.
+// Records are accepted regardless of the order in which the A/AAAA responses
+// arrive: a hostname is one of this zone's nameservers if it is still pending
+// (hostsWithoutAddresses) or if we already store an address for it.
+// This was not possible in the old approach.
+// hostsWithoutAddresses is sort of obsolete, but we kept it in just in case.
+// Function has swapped the logic, instead of looping over hostnames (from hostsWithoutAddresses)
+// we loop over the rr's and check if they match a name in our ipv4 or ipv6 array.
 func (pool *nameserverPool) enrich(records []dns.RR) {
 	if len(records) == 0 {
 		return
@@ -178,45 +186,88 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 	defer pool.updating.Unlock()
 
 	var ttl = pool.config.maxAllowedTTL
-	hostnamesStillWithoutAddresses := make([]string, 0, len(pool.hostsWithoutAddresses))
 
-	for _, hostname := range pool.hostsWithoutAddresses {
+	for _, rr := range records {
+		var addrString string
+		ipv6Record := false
 
-		a, aaaa, minTtlSeen := findAddressesForHostname(hostname, records, pool.config.maxAllowedTTL)
-
-		if len(a) == 0 && len(aaaa) == 0 {
-			hostnamesStillWithoutAddresses = append(hostnamesStillWithoutAddresses, hostname)
+		switch addr := rr.(type) {
+		case *dns.A:
+			addrString = addr.A.String()
+		case *dns.AAAA:
+			addrString = addr.AAAA.String()
+			ipv6Record = true
+		default:
 			continue
 		}
 
-		//---
-
-		ttl = min(minTtlSeen, ttl)
-
-		for _, addr := range a {
-			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), pool.config))
+		hostname := canonicalName(rr.Header().Name)
+		if !pool.nameserverHostnameKnown(hostname) {
+			// Not one of this zone's nameservers.
+			continue
 		}
 
-		for _, addr := range aaaa {
-			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), pool.config))
+		if pool.hostAddressKnown(hostname, addrString) {
+			// The hostname already has this address.
+			continue
 		}
+
+		if ipv6Record {
+			pool.ipv6 = append(pool.ipv6, newNameserver(hostname, addrString, pool.config))
+		} else {
+			pool.ipv4 = append(pool.ipv4, newNameserver(hostname, addrString, pool.config))
+		}
+
+		ttl = min(rr.Header().Ttl, ttl)
 	}
+
+	// Any pending hostname that now has at least one address is no longer pending.
+	pool.hostsWithoutAddresses = slices.Clip(slices.DeleteFunc(pool.hostsWithoutAddresses, pool.hostResolved))
 
 	if pool.expires.Load() > 0 {
 		expires := time.Now().Add(time.Duration(ttl) * time.Second)
 		pool.expires.Store(expires.Unix())
 	}
 
-	//if !pool.expires.IsZero() {
-	//	expires := time.Now().Add(time.Duration(ttl) * time.Second)
-	//	if expires.Before(pool.expires) {
-	//		pool.expires = expires
-	//	}
-	//}
-
-	pool.hostsWithoutAddresses = slices.Clip(hostnamesStillWithoutAddresses)
-
 	pool.updateIPCount()
+}
+
+// hostResolved reports whether hostname has at least one address in the pool.
+func (pool *nameserverPool) hostResolved(hostname string) bool {
+	return pool.hostAddressKnown(hostname, "")
+}
+
+// nameserverHostnameKnown reports whether hostname belongs to this zone's
+// nameservers, without keeping a separate list of them: it is either still
+// waiting for its first address, or we already store an address for it (in
+// which case the other address family can still be added).
+func (pool *nameserverPool) nameserverHostnameKnown(hostname string) bool {
+	for _, pending := range pool.hostsWithoutAddresses {
+		if pending == hostname {
+			return true
+		}
+	}
+	return pool.hostAddressKnown(hostname, "")
+}
+
+// hostAddressKnown reports whether hostname already has the given address in
+// the pool. An empty addr matches any address of the hostname.
+func (pool *nameserverPool) hostAddressKnown(hostname, addr string) bool {
+	for _, ns := range pool.ipv4 {
+		if server, ok := ns.(*nameserver); ok {
+			if server.hostname == hostname && (addr == "" || server.addr == addr) {
+				return true
+			}
+		}
+	}
+	for _, ns := range pool.ipv6 {
+		if server, ok := ns.(*nameserver); ok {
+			if server.hostname == hostname && (addr == "" || server.addr == addr) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (pool *nameserverPool) updateIPCount() {

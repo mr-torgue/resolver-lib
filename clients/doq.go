@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,6 +21,9 @@ type DOQClient struct {
 	Timeout   time.Duration
 }
 
+// we need this for blacklisting
+var ErrNoDoQ = errors.New("unable to establish a QUIC session: server may not offer DoQ")
+
 // ExchangeContext sends msg to the address specified in addr (without port number).
 func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr string) (rsp *dns.Msg, rtt time.Duration, err error) {
 
@@ -32,7 +36,7 @@ func (c *DOQClient) ExchangeContext(ctx context.Context, msg *dns.Msg, addr stri
 
 	// NOTE: is there a simpler way to detect if a server supports QUIC instead of relying on timeouts?
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("%w: %w", ErrNoDoQ, err)
 	}
 	defer session.CloseWithError(quic.ApplicationErrorCode(quic.NoError), "")
 	// ref: https://www.rfc-editor.org/rfc/rfc9250.html#name-dns-message-ids

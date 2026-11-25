@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -174,4 +175,15 @@ func TestCreateZone_SuccessWithOptionalEnrichment(t *testing.T) {
 		}
 	}
 	assert.Equal(t, pool.status(), PoolPrimed)
+}
+
+// openFDs reports how many file descriptors the test process currently holds.
+func openFDs(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Logf("cannot count open FDs: %v", err)
+		return -1
+	}
+	return len(entries)
 }

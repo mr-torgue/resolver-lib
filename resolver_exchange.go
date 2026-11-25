@@ -172,6 +172,18 @@ func (resolver *Resolver) resolveLabel(ctx context.Context, d *domain, z zone, q
 
 }
 
+// recordsSignedOutsideZone reports whether any RRSIG in rr was made by a zone
+// other than zoneName.
+func recordsSignedOutsideZone(rr []dns.RR, zoneName string) bool {
+	zoneName = dns.CanonicalName(zoneName)
+	for _, record := range rr {
+		if sig, ok := record.(*dns.RRSIG); ok && dns.CanonicalName(sig.SignerName) != zoneName {
+			return true
+		}
+	}
+	return false
+}
+
 func (resolver *Resolver) checkForMissingZones(ctx context.Context, d *domain, z zone, rmsg *dns.Msg, auth *authenticator) zone {
 
 	// records := append(rmsg.Ns, rmsg.Answer...)
@@ -203,6 +215,25 @@ func (resolver *Resolver) checkForMissingZones(ctx context.Context, d *domain, z
 	// Then no options could be found.
 	if nextRecordsOwner == "." {
 		return z
+	}
+
+	// The record owner may equal the current label without being the current
+	// zone itself: the answer can then be signed by a child zone we have not
+	// discovered yet (parent and child sharing nameservers means no referral
+	// was returned, so d.gap() below is empty). If the records are signed by
+	// such a zone, probe for its SOA; if the name is a zone cut, register the
+	// zone and fetch its DS so the response can be validated.
+	if dns.CanonicalName(nextRecordsOwner) == dns.CanonicalName(d.current()) &&
+		dns.CanonicalName(nextRecordsOwner) != dns.CanonicalName(z.name()) &&
+		recordsSignedOutsideZone(records, z.name()) {
+		if soa, err := z.soa(ctx, nextRecordsOwner); err == nil && soa != nil {
+			newZone := z.clone(nextRecordsOwner, z.name())
+			if auth != nil {
+				auth.addDelegationSignerLink(z, newZone.name(), resolver.config.udpsize)
+			}
+			resolver.zones.add(newZone)
+			z = newZone
+		}
 	}
 
 	// d.current() here is the domain we're expecting.

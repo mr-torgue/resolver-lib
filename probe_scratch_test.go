@@ -1,14 +1,6 @@
 package resolver
 
-import (
-	"context"
-	"fmt"
-	"testing"
-	"time"
-
-	"github.com/miekg/dns"
-)
-
+/*
 func TestProbeScratch(t *testing.T) {
 	domains := []string{
 		"alg13.dnstest.dev", "valid.alg13.dnstest.dev", "invalid.alg13.dnstest.dev",
@@ -42,3 +34,5 @@ func TestProbeScratch(t *testing.T) {
 		}
 	}
 }
+
+*/

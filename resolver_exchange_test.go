@@ -1258,23 +1258,24 @@ func TestResolver_Exchange_DNSTestDev(t *testing.T) {
 
 	tests := []DNSTestCase{
 		{"alg13.dnstest.dev apex validates as Secure (ECDSA P-256, alg 13)", "alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 13", "188.114.96.0"},
-		{"valid.alg13.dnstest.dev", "valid.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 13", "188.114.96.0"},
-		{"invalid.alg13.dnstest.dev", "invalid.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 13", "188.114.96.0"},
-		{"expired.alg13.dnstest.dev", "expired.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 13", "188.114.96.0"},
-		{"invalid-dnskey.alg13.dnstest.dev", "invalid-dnskey.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 13", "188.114.96.0"},
-		{"expired-dnskey.alg13.dnstest.dev", "expired-dnskey.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 13", "188.114.96.0"},
+		{"valid.alg13.dnstest.dev", "valid.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 13", "188.114.96.0"},
+		{"invalid.alg13.dnstest.dev", "invalid.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "signature is invalid", "", ""},
+		{"expired.alg13.dnstest.dev", "expired.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"invalid-dnskey.alg13.dnstest.dev", "invalid-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "failed to verify with key", "", ""},
+		{"expired-dnskey.alg13.dnstest.dev", "expired-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
 		{"mldsa44.dnstest.dev apex validates as Secure (ML-DSA-44, alg 18)", "mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
-		{"valid.mldsa44.dnstest.dev", "valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"invalid.mldsa44.dnstest.dev", "invalid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"expired.mldsa44.dnstest.dev", "expired.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"invalid-dnskey.mldsa44.dnstest.dev", "invalid-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"expired-dnskey.mldsa44.dnstest.dev", "expired-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"dual-valid.mldsa44.dnstest.dev (alg 13 and 18)", "dual-valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"upgrade.mldsa44.dnstest.dev", "upgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
-		{"downgrade.mldsa44.dnstest.dev", "downgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Unknown, false, "missing DS record", "RRSIG\tA 18", "188.114.96.0"},
+		{"valid.mldsa44.dnstest.dev", "valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		{"invalid.mldsa44.dnstest.dev", "invalid.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "signature is invalid", "", ""},
+		{"expired.mldsa44.dnstest.dev", "expired.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"invalid-dnskey.mldsa44.dnstest.dev", "invalid-dnskey.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "failed to verify data with key", "", ""},
+		{"expired-dnskey.mldsa44.dnstest.dev", "expired-dnskey.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"dual-valid.mldsa44.dnstest.dev (alg 13 and 18)", "dual-valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		{"upgrade.mldsa44.dnstest.dev", "upgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		// Note: by default our server needs only 1 signature to be valid (downgrade attacks work)
+		{"downgrade.mldsa44.dnstest.dev", "downgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
 	}
 
-	resolver := NewResolver(ConfigBuilder(WithClient("udp", true), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second)))
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", true), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithLazyEnrichment(true)))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1284,6 +1285,9 @@ func TestResolver_Exchange_DNSTestDev(t *testing.T) {
 
 			response := resolver.Exchange(context.Background(), qmsg)
 			require.NotNil(t, response)
+			if response.Msg == nil {
+				t.Fatal("shoudl fail")
+			}
 			require.NotNil(t, response.Msg)
 			assert.Equal(t, tt.rcode, response.Msg.Rcode, "rcodes should match")
 			assert.Equal(t, tt.auth, response.Auth, "authentication results should match")
@@ -1293,9 +1297,9 @@ func TestResolver_Exchange_DNSTestDev(t *testing.T) {
 				assert.Contains(t, response.Err.Error(), tt.errContains)
 			} else {
 				assert.NoError(t, response.Err)
+				assert.Contains(t, response.Msg.String(), tt.expected, "answers should match")
+				assert.Contains(t, response.Msg.String(), tt.sigAlg, "answers should contain an RRSIG with the expected algorithm")
 			}
-			assert.Contains(t, response.Msg.String(), tt.expected, "answers should match")
-			assert.Contains(t, response.Msg.String(), tt.sigAlg, "answers should contain an RRSIG with the expected algorithm")
 		})
 	}
 }

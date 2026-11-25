@@ -120,6 +120,12 @@ func TestPoolExchange_IPv4OnlySecondTry(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6Unavailable(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
 	ns1Called := false
 	ns1 := TestPoolExchangeMockNameserver{
 		func(context.Context, *dns.Msg) *Response {
@@ -176,6 +182,12 @@ func TestPoolExchange_IPv6Unavailable(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6OnlyFirstTry(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
 	ns1Called := false
 	ns1 := TestPoolExchangeMockNameserver{
 		func(context.Context, *dns.Msg) *Response {
@@ -215,6 +227,12 @@ func TestPoolExchange_IPv6OnlyFirstTry(t *testing.T) {
 }
 
 func TestPoolExchange_IPv6OnlySecondTry(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
 	ErrTest := errors.New("test error")
 
 	ns1Called := false
@@ -257,6 +275,12 @@ func TestPoolExchange_IPv6OnlySecondTry(t *testing.T) {
 }
 
 func TestPoolExchange_Error(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
 	ErrTest := errors.New("test error")
 
 	ns1Called := false
@@ -321,4 +345,28 @@ func TestPoolExchange_Error(t *testing.T) {
 		assert.Contains(t, r.Err.Error(), "example.com.")
 		assert.Contains(t, r.Err.Error(), "test.zone")
 	}
+}
+
+// A pool that, through a race between count and slice updates, yields no
+// server at all must return an error response rather than panic.
+func TestPoolExchange_NoServerAvailable(t *testing.T) {
+	oldAvailable, oldAnswered := ipv6Available.Load(), ipv6Answered.Load()
+	t.Cleanup(func() {
+		ipv6Available.Store(oldAvailable)
+		ipv6Answered.Store(oldAnswered)
+	})
+
+	pool := nameserverPool{}
+	// Count claims an IPv6 server exists, but the slice is empty, so both
+	// attempts fail to return a nameserver.
+	pool.ipv6Count.Store(1)
+	ipv6Answered.Store(true)
+	ipv6Available.Store(false)
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	r := pool.exchange(context.Background(), msg)
+	assert.True(t, r.HasError())
+	assert.ErrorIs(t, r.Err, ErrUnableToResolveAnswer)
 }
