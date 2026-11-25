@@ -22,18 +22,11 @@ const (
 type nameserverPool struct {
 	// hostsWithoutAddresses contains the hostnames of nameservers for which
 	// no address has been seen yet. Once an address is found (any family),
-	// they're removed from this list. Together with addressesByHostname it
-	// decides whether a hostname is one of this zone's nameservers (and thus
-	// eligible for enrichment), so no separate list of all nameserver
-	// hostnames needs to be kept.
+	// they're removed from this list. Membership of a hostname (and thus
+	// eligibility for enrichment) is derived from this list together with the
+	// addresses already stored in pool.ipv4 / pool.ipv6, so no separate list
+	// of all nameserver hostnames needs to be kept.
 	hostsWithoutAddresses []string
-
-	// addressesByHostname indexes the addresses stored in the pool:
-	// hostname -> set of addresses (both families, in string form). It is
-	// kept in sync with the ipv4 / ipv6 slices by addAddress(), and gives
-	// O(1) membership and duplicate checks, instead of scanning the pool.
-	// Guarded by updating (or built before the pool is published).
-	addressesByHostname map[string]map[string]struct{}
 
 	ipv4      []exchanger
 	ipv4Next  atomic.Uint32
@@ -163,11 +156,11 @@ func newNameserverPool(nameservers []*dns.NS, extra []dns.RR, config *Config) *n
 		ttl = min(minTtlSeen, ttl)
 
 		for _, addr := range a {
-			pool.addAddress(hostname, addr.A.String(), false)
+			pool.ipv4 = append(pool.ipv4, newNameserver(addr.Header().Name, addr.A.String(), config))
 		}
 
 		for _, addr := range aaaa {
-			pool.addAddress(hostname, addr.AAAA.String(), true)
+			pool.ipv6 = append(pool.ipv6, newNameserver(addr.Header().Name, addr.AAAA.String(), config))
 		}
 
 	}
@@ -225,7 +218,11 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 			continue
 		}
 
-		pool.addAddress(hostname, addrString, ipv6Record)
+		if ipv6Record {
+			pool.ipv6 = append(pool.ipv6, newNameserver(hostname, addrString, pool.config))
+		} else {
+			pool.ipv4 = append(pool.ipv4, newNameserver(hostname, addrString, pool.config))
+		}
 
 		ttl = min(rr.Header().Ttl, ttl)
 	}
@@ -241,29 +238,9 @@ func (pool *nameserverPool) enrich(records []dns.RR) {
 	pool.updateIPCount()
 }
 
-// addAddress stores an address for a nameserver hostname in the pool, adding
-// it to the ipv4 / ipv6 slices AND to the addressesByHostname index. Callers
-// must hold updating, or not have published the pool yet.
-func (pool *nameserverPool) addAddress(hostname, addr string, ipv6Address bool) {
-	if pool.addressesByHostname == nil {
-		pool.addressesByHostname = make(map[string]map[string]struct{})
-	}
-	if _, ok := pool.addressesByHostname[hostname]; !ok {
-		pool.addressesByHostname[hostname] = make(map[string]struct{})
-	}
-	pool.addressesByHostname[hostname][addr] = struct{}{}
-
-	if ipv6Address {
-		pool.ipv6 = append(pool.ipv6, newNameserver(hostname, addr, pool.config))
-	} else {
-		pool.ipv4 = append(pool.ipv4, newNameserver(hostname, addr, pool.config))
-	}
-}
-
 // hostResolved reports whether hostname has at least one address in the pool.
 func (pool *nameserverPool) hostResolved(hostname string) bool {
-	_, resolved := pool.addressesByHostname[hostname]
-	return resolved
+	return pool.hostAddressKnown(hostname, "")
 }
 
 // nameserverHostnameKnown reports whether hostname belongs to this zone's
@@ -276,22 +253,27 @@ func (pool *nameserverPool) nameserverHostnameKnown(hostname string) bool {
 			return true
 		}
 	}
-	_, addressed := pool.addressesByHostname[hostname]
-	return addressed
+	return pool.hostAddressKnown(hostname, "")
 }
 
 // hostAddressKnown reports whether hostname already has the given address in
 // the pool. An empty addr matches any address of the hostname.
 func (pool *nameserverPool) hostAddressKnown(hostname, addr string) bool {
-	addresses, addressed := pool.addressesByHostname[hostname]
-	if !addressed {
-		return false
+	for _, ns := range pool.ipv4 {
+		if server, ok := ns.(*nameserver); ok {
+			if server.hostname == hostname && (addr == "" || server.addr == addr) {
+				return true
+			}
+		}
 	}
-	if addr == "" {
-		return true
+	for _, ns := range pool.ipv6 {
+		if server, ok := ns.(*nameserver); ok {
+			if server.hostname == hostname && (addr == "" || server.addr == addr) {
+				return true
+			}
+		}
 	}
-	_, known := addresses[addr]
-	return known
+	return false
 }
 
 func (pool *nameserverPool) updateIPCount() {
