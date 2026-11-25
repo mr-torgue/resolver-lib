@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"testing"
 	"time"
 
@@ -112,7 +113,7 @@ func TestLookupClassic_TLS(t *testing.T) {
 				{"[TLS] Client should return A record of example.com", "example.com", "A", "8.8.8.8", "dns.google", true, false, dns.RcodeSuccess, 2, "172.66.147.243", ""},
 				{"[TLS] Test with verify", "example.com", "A", "8.8.8.8", "dns.google", true, true, dns.RcodeSuccess, 2, "172.66.147.243", ""},
 				{"[TLS] Test with verify with wrong hostname", "example.com", "A", "8.8.8.8", "dns.gogle", true, true, dns.RcodeSuccess, 2, "172.66.147.243", "failed to verify certificate"},
-				{"[TLS] Nameserver does not understand TLS", "example.com", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "172.66.147.243", "context deadline exceeded"},
+				{"[TLS] Nameserver does not understand TLS", "example.com", "A", "192.48.79.30", "j.gtld-servers.net.", true, false, dns.RcodeSuccess, 2, "172.66.147.243", "i/o timeout"},
 			},
 		},
 	}
@@ -151,6 +152,78 @@ func TestLookupClassic_TLS(t *testing.T) {
 					assert.Greater(t, ttconfig.timeout, rtt, "timeout > rtt")
 					require.NotNil(t, rmsg, "rmsg should not be nil")
 					assert.Equal(t, tt.rcode, rmsg.Rcode, "rcodes should match")
+					assert.Contains(t, rmsg.String(), tt.expected, "answers should match")
+				}
+			})
+		}
+	}
+}
+
+func TestLookupClassic_DNSTestDev(t *testing.T) {
+	type DNSTestCase struct {
+		name     string
+		qname    string
+		rcode    int
+		ad       bool
+		expected string
+	}
+
+	cases := []DNSTestCase{
+		{"alg13.dnstest.dev apex (ECDSA P-256) returns AD answer", "alg13.dnstest.dev", dns.RcodeSuccess, true, "188.114.96.0"},
+		{"valid.alg13.dnstest.dev returns AD answer", "valid.alg13.dnstest.dev", dns.RcodeSuccess, true, "188.114.96.0"},
+		{"invalid.alg13.dnstest.dev is rejected", "invalid.alg13.dnstest.dev", dns.RcodeServerFailure, false, ""},
+		{"expired.alg13.dnstest.dev is rejected", "expired.alg13.dnstest.dev", dns.RcodeServerFailure, false, ""},
+		{"invalid-dnskey.alg13.dnstest.dev is rejected", "invalid-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, false, ""},
+		{"expired-dnskey.alg13.dnstest.dev is rejected", "expired-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, false, ""},
+		{"mldsa44.dnstest.dev apex (ML-DSA-44)", "mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"valid.mldsa44.dnstest.dev", "valid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"invalid.mldsa44.dnstest.dev", "invalid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"expired.mldsa44.dnstest.dev", "expired.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"invalid-dnskey.mldsa44.dnstest.dev", "invalid-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"expired-dnskey.mldsa44.dnstest.dev", "expired-dnskey.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"dual-valid.mldsa44.dnstest.dev", "dual-valid.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+		{"upgrade.mldsa44.dnstest.dev is rejected", "upgrade.mldsa44.dnstest.dev", dns.RcodeServerFailure, false, ""},
+		{"downgrade.mldsa44.dnstest.dev", "downgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, false, ""},
+	}
+
+	configs := []struct {
+		name       string
+		clientType string
+		port       string
+		tlsHost    string
+	}{
+		{"UDP", "udp", "53", ""},
+		{"TCP", "tcp", "53", ""},
+		{"DoT", "tcp-tls", "853", "dns.google"},
+	}
+
+	for _, cfg := range configs {
+		client := ClassicClient{
+			Port:   cfg.port,
+			Client: &dns.Client{Net: cfg.clientType, Timeout: 5 * time.Second},
+		}
+		if cfg.clientType == "tcp-tls" {
+			client.Client.TLSConfig = &tls.Config{
+				ServerName:         dns.Fqdn(cfg.tlsHost),
+				InsecureSkipVerify: false,
+			}
+		}
+		for _, tt := range cases {
+			t.Run(fmt.Sprintf("[%s] dnstest.dev %s", cfg.name, tt.name), func(t *testing.T) {
+				qmsg := new(dns.Msg)
+				qmsg.SetQuestion(dns.Fqdn(tt.qname), dns.TypeA)
+				qmsg.SetEdns0(1232, true)
+				qmsg.MsgHdr.RecursionDesired = true
+
+				ctx, _ := context.WithTimeout(context.Background(), 6*time.Second)
+				rmsg, rtt, err := client.ExchangeContext(ctx, qmsg, "8.8.8.8")
+
+				require.NoError(t, err)
+				require.NotNil(t, rmsg, "rmsg should not be nil")
+				assert.Greater(t, 6*time.Second, rtt, "timeout > rtt")
+				assert.Equal(t, tt.rcode, rmsg.Rcode, "rcodes should match")
+				assert.Equal(t, tt.ad, rmsg.AuthenticatedData, "AD bits should match")
+				if tt.expected != "" {
 					assert.Contains(t, rmsg.String(), tt.expected, "answers should match")
 				}
 			})

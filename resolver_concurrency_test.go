@@ -19,6 +19,7 @@ func newConcurrentTestResolver(t *testing.T, answerIP string, options ...Option)
 
 	options = append([]Option{
 		WithCustomRoot("testdata/rootzones/named.root", "testdata/rootanchors/root-anchors.xml"),
+		WithLazyEnrichment(true),
 	}, options...)
 
 	r := NewResolver(ConfigBuilder(options...))
@@ -44,8 +45,8 @@ func newConcurrentTestResolver(t *testing.T, answerIP string, options ...Option)
 // (like multiple `resolver {}` blocks in one CoreDNS server) and hammers both with
 // concurrent queries. Each resolver must only ever see its own answers.
 func TestTwoResolvers_ConcurrentExchange(t *testing.T) {
-	r1 := newConcurrentTestResolver(t, "192.0.2.1", WithClient("udp", true), WithCache(64))
-	r2 := newConcurrentTestResolver(t, "192.0.2.2", WithClient("tcp", false), WithCache(128))
+	r1 := newConcurrentTestResolver(t, "192.0.2.1", WithClient("udp", true), WithCache(64), WithLazyEnrichment(true))
+	r2 := newConcurrentTestResolver(t, "192.0.2.2", WithClient("tcp", false), WithCache(128), WithLazyEnrichment(true))
 
 	const workers = 8
 	const queriesPerWorker = 25
@@ -95,6 +96,7 @@ func TestNewResolver_ConcurrentConstruction(t *testing.T) {
 			defer wg.Done()
 			resolvers[i] = NewResolver(ConfigBuilder(
 				WithCustomRoot("testdata/rootzones/named.root", "testdata/rootanchors/root-anchors.xml"),
+				WithLazyEnrichment(true),
 			))
 		}(i)
 	}
@@ -161,7 +163,7 @@ func TestNameserverPool_ConcurrentEnrich(t *testing.T) {
 		{Hdr: dns.RR_Header{Name: "example.com.", Rrtype: dns.TypeNS}, Ns: "ns2.example.com."},
 	}
 
-	pool := newNameserverPool(nameservers, nil, ConfigBuilder())
+	pool := newNameserverPool(nameservers, nil, ConfigBuilder(WithLazyEnrichment(true)))
 	require.Equal(t, PoolHasHostnamesButNoIpAddresses, pool.status())
 
 	exchanger := &mockExchanger{

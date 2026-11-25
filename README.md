@@ -16,6 +16,9 @@ dedicated project.
 > security-critical applications at this stage.
 
 # Usage
+By default, we replace the standard `miekg/dns` module with `mr-torgue/dns` which is PQC-enabled.
+If you don't want this, remove the replace statement in `go.mod` and it should use the default.
+
 
 ```go
 package main
@@ -24,7 +27,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/miekg/dns" // for openssl support
+	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib"
 )
 

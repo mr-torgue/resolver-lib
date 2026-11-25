@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/mr-torgue/resolver-lib/dnssec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1103,7 +1104,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond) // to make sure it is added to cache (async update)
-	_, err := resolver.config.cache.Get("", qmsg)
+	_, err := resolver.config.cache.Get(qmsg)
 	assert.Nil(t, err)
 
 	// test with DNSSEC domain
@@ -1120,7 +1121,7 @@ func TestResolver_Cache(t *testing.T) {
 
 	// check cache
 	time.Sleep(500 * time.Millisecond)
-	_, err = resolver.config.cache.Get("", qmsg)
+	_, err = resolver.config.cache.Get(qmsg)
 	assert.Nil(t, err)
 }
 
@@ -1205,5 +1206,100 @@ func BenchmarkResolver_Exchange_TCP_1(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = resolver.Exchange(context.Background(), msg)
+	}
+}
+
+// TestResolver_Cache_Validation tests that after a validated response the
+// cache entries are marked (Secure here), so a subsequent DO query is served
+// from the cache with the AD bit set.
+func TestResolver_Cache_Validation(t *testing.T) {
+	qmsg := &dns.Msg{}
+	qmsg.SetQuestion("sidn.nl.", dns.TypeA)
+	qmsg.SetEdns0(1232, true)
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithCache(1000)))
+	require.NotNil(t, resolver.config.cache)
+
+	response := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Msg)
+	require.True(t, response.Msg.AuthenticatedData)
+
+	// The cache entry must now be validated: a DO query against the cache
+	// directly must be served with AD, not rejected as unvalidated.
+	cached, err := resolver.config.cache.Get(qmsg)
+	require.NoError(t, err)
+	assert.True(t, cached.AuthenticatedData)
+	assert.Equal(t, dns.RcodeSuccess, cached.Rcode)
+	assert.NotEmpty(t, cached.Answer)
+
+	// A second exchange is served from the cache and still has AD set.
+	response2 := resolver.Exchange(context.Background(), qmsg)
+	require.NotNil(t, response2)
+	require.NotNil(t, response2.Msg)
+	assert.True(t, response2.Msg.AuthenticatedData)
+	assert.NotEmpty(t, response2.Msg.Answer)
+}
+
+// Tests real scenarios by connecting to dnstest.dev domains
+// Note: the mldsa44 only works, if we use the pqc dns library
+// Note: high timeouts to make sure that the deadline is not exceeded, which happens easily if a VPN is used
+func TestResolver_Exchange_DNSTestDev(t *testing.T) {
+	type DNSTestCase struct {
+		name        string
+		qname       string
+		rcode       int
+		auth        dnssec.AuthenticationResult
+		ad          bool
+		errContains string
+		sigAlg      string
+		expected    string
+	}
+
+	tests := []DNSTestCase{
+		{"alg13.dnstest.dev apex validates as Secure (ECDSA P-256, alg 13)", "alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 13", "188.114.96.0"},
+		{"valid.alg13.dnstest.dev", "valid.alg13.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 13", "188.114.96.0"},
+		{"invalid.alg13.dnstest.dev", "invalid.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "signature is invalid", "", ""},
+		{"expired.alg13.dnstest.dev", "expired.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"invalid-dnskey.alg13.dnstest.dev", "invalid-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "failed to verify with key", "", ""},
+		{"expired-dnskey.alg13.dnstest.dev", "expired-dnskey.alg13.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"mldsa44.dnstest.dev apex validates as Secure (ML-DSA-44, alg 18)", "mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		{"valid.mldsa44.dnstest.dev", "valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		{"invalid.mldsa44.dnstest.dev", "invalid.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "signature is invalid", "", ""},
+		{"expired.mldsa44.dnstest.dev", "expired.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"invalid-dnskey.mldsa44.dnstest.dev", "invalid-dnskey.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "failed to verify data with key", "", ""},
+		{"expired-dnskey.mldsa44.dnstest.dev", "expired-dnskey.mldsa44.dnstest.dev", dns.RcodeServerFailure, dnssec.Bogus, false, "current time is outside of the msg validity period", "", ""},
+		{"dual-valid.mldsa44.dnstest.dev (alg 13 and 18)", "dual-valid.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		{"upgrade.mldsa44.dnstest.dev", "upgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+		// Note: by default our server needs only 1 signature to be valid (downgrade attacks work)
+		{"downgrade.mldsa44.dnstest.dev", "downgrade.mldsa44.dnstest.dev", dns.RcodeSuccess, dnssec.Secure, true, "", "RRSIG\tA 18", "188.114.96.0"},
+	}
+
+	resolver := NewResolver(ConfigBuilder(WithClient("udp", true), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second), WithLazyEnrichment(true)))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qmsg := new(dns.Msg)
+			qmsg.SetQuestion(dns.Fqdn(tt.qname), dns.TypeA)
+			qmsg.SetEdns0(1232, true)
+
+			response := resolver.Exchange(context.Background(), qmsg)
+			require.NotNil(t, response)
+			if response.Msg == nil {
+				t.Fatal("shoudl fail")
+			}
+			require.NotNil(t, response.Msg)
+			assert.Equal(t, tt.rcode, response.Msg.Rcode, "rcodes should match")
+			assert.Equal(t, tt.auth, response.Auth, "authentication results should match")
+			assert.Equal(t, tt.ad, response.Msg.AuthenticatedData, "AD bits should match")
+			if tt.errContains != "" {
+				require.Error(t, response.Err)
+				assert.Contains(t, response.Err.Error(), tt.errContains)
+			} else {
+				assert.NoError(t, response.Err)
+				assert.Contains(t, response.Msg.String(), tt.expected, "answers should match")
+				assert.Contains(t, response.Msg.String(), tt.sigAlg, "answers should contain an RRSIG with the expected algorithm")
+			}
+		})
 	}
 }

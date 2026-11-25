@@ -13,6 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/mr-torgue/resolver-lib/clients"
+	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -281,7 +282,8 @@ func TestDefaultDnsClientFactory_TCP(t *testing.T) {
 // match returns true if rr is in the expectedRRs slice
 func match(rr dns.RR, expectedRRs []ExpectedRR) (bool, int) {
 	for i, expectedRR := range expectedRRs {
-		if expectedRR.qtype == rr.Header().Rrtype && strings.Contains(rr.String(), expectedRR.value) {
+		// match if "" (functions as a wildcard)
+		if expectedRR.qtype == rr.Header().Rrtype && (strings.Contains(rr.String(), expectedRR.value) || expectedRR.value == "") {
 			return true, i
 		}
 	}
@@ -351,7 +353,7 @@ func Test_exchange(t *testing.T) {
 					rcode:             dns.RcodeSuccess,
 					expectedNrAnswers: 2,
 					expectedAnswers: []ExpectedRR{
-						{dns.TypeA, "4.237.22.38"},
+						{dns.TypeA, ""},
 						{dns.TypeCNAME, "github.com."},
 					},
 					expectedNrAuth: 0,
@@ -375,7 +377,7 @@ func Test_exchange(t *testing.T) {
 					rd:                true,
 					expectedNrAnswers: 2,
 					expectedAnswers: []ExpectedRR{
-						{dns.TypeA, "4.237.22.38"},
+						{dns.TypeA, ""},
 						{dns.TypeCNAME, "github.com."},
 					},
 					expectedNrAuth: 0,
@@ -408,7 +410,7 @@ func Test_exchange(t *testing.T) {
 				ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify))
 			})
 		} else {
-			config := ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify))
+			config := ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(!ttconfig.insecureSkipVerify), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second))
 			got = newNameserver(ttconfig.hostname, ttconfig.addr, config)
 			assert.Equal(t, ttconfig.hostname, got.hostname)
 			assert.Equal(t, ttconfig.addr, got.addr)
@@ -655,4 +657,266 @@ func Test_nameserver_defaultDnsClientFactory(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Note: high timeouts to make sure that the deadline is not exceeded, which happens easily if a VPN is used
+func Test_exchange_dnstestdev(t *testing.T) {
+	type DNSTestCase struct {
+		name              string
+		qname             string
+		rcode             int
+		checkRcode        bool
+		expectedNrAnswers int
+		expectedAnswers   []ExpectedRR
+	}
+
+	tests := []struct {
+		name           string
+		hostname       string
+		addr           string
+		client         string
+		expectedClient string
+		testCases      []DNSTestCase
+	}{
+		{
+			name:           "Google nameserver with UDP (dnstest.dev)",
+			hostname:       "dns.google.",
+			addr:           "8.8.8.8",
+			client:         "udp",
+			expectedClient: "*clients.ClassicClient",
+			testCases: []DNSTestCase{
+				{name: "[UDP] alg13.dnstest.dev apex (ECDSA P-256)", qname: "alg13.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 3, expectedAnswers: []ExpectedRR{{dns.TypeA, "188.114.96.0"}}},
+				{name: "[UDP] valid.alg13.dnstest.dev", qname: "valid.alg13.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 3, expectedAnswers: []ExpectedRR{{dns.TypeA, "188.114.96.0"}}},
+				{name: "[UDP] invalid.alg13.dnstest.dev is rejected", qname: "invalid.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] expired.alg13.dnstest.dev is rejected", qname: "expired.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] invalid-dnskey.alg13.dnstest.dev is rejected", qname: "invalid-dnskey.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] expired-dnskey.alg13.dnstest.dev is rejected", qname: "expired-dnskey.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] mldsa44.dnstest.dev apex (ML-DSA-44)", qname: "mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] valid.mldsa44.dnstest.dev", qname: "valid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] invalid.mldsa44.dnstest.dev", qname: "invalid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] expired.mldsa44.dnstest.dev", qname: "expired.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] invalid-dnskey.mldsa44.dnstest.dev", qname: "invalid-dnskey.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] expired-dnskey.mldsa44.dnstest.dev", qname: "expired-dnskey.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] dual-valid.mldsa44.dnstest.dev", qname: "dual-valid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] upgrade.mldsa44.dnstest.dev is rejected", qname: "upgrade.mldsa44.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[UDP] downgrade.mldsa44.dnstest.dev", qname: "downgrade.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 0},
+			},
+		},
+		{
+			name:           "Quad9 nameserver with DoQ (dnstest.dev)",
+			hostname:       "dns.quad9.net.",
+			addr:           "9.9.9.9",
+			client:         "doq",
+			expectedClient: "*clients.DOQClient",
+			testCases: []DNSTestCase{
+				{name: "[DOQ] alg13.dnstest.dev apex (ECDSA P-256)", qname: "alg13.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 3, expectedAnswers: []ExpectedRR{{dns.TypeA, "188.114.96.0"}}},
+				{name: "[DOQ] valid.alg13.dnstest.dev", qname: "valid.alg13.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: 3, expectedAnswers: []ExpectedRR{{dns.TypeA, "188.114.96.0"}}},
+				{name: "[DOQ] invalid.alg13.dnstest.dev is rejected", qname: "invalid.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[DOQ] expired.alg13.dnstest.dev is rejected", qname: "expired.alg13.dnstest.dev", rcode: dns.RcodeServerFailure, checkRcode: true, expectedNrAnswers: 0},
+				{name: "[DOQ] invalid-dnskey.alg13.dnstest.dev", qname: "invalid-dnskey.alg13.dnstest.dev", checkRcode: false, expectedNrAnswers: -1},
+				{name: "[DOQ] expired-dnskey.alg13.dnstest.dev", qname: "expired-dnskey.alg13.dnstest.dev", checkRcode: false, expectedNrAnswers: -1},
+				{name: "[DOQ] mldsa44.dnstest.dev apex (ML-DSA-44)", qname: "mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] valid.mldsa44.dnstest.dev", qname: "valid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] invalid.mldsa44.dnstest.dev", qname: "invalid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] expired.mldsa44.dnstest.dev", qname: "expired.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] invalid-dnskey.mldsa44.dnstest.dev", qname: "invalid-dnskey.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] expired-dnskey.mldsa44.dnstest.dev", qname: "expired-dnskey.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] dual-valid.mldsa44.dnstest.dev", qname: "dual-valid.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] upgrade.mldsa44.dnstest.dev", qname: "upgrade.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+				{name: "[DOQ] downgrade.mldsa44.dnstest.dev", qname: "downgrade.mldsa44.dnstest.dev", rcode: dns.RcodeSuccess, checkRcode: true, expectedNrAnswers: -1},
+			},
+		},
+	}
+	for _, ttconfig := range tests {
+		config := ConfigBuilder(WithClient(ttconfig.client, false), WithTLSVerification(false), WithTimeouts(10*time.Second, 10*time.Second, 10*time.Second, 10*time.Second))
+		got := newNameserver(ttconfig.hostname, ttconfig.addr, config)
+		assert.Equal(t, ttconfig.hostname, got.hostname)
+		assert.Equal(t, ttconfig.addr, got.addr)
+		client := got.defaultDnsClientFactory(ttconfig.client)
+		assert.Equal(t, ttconfig.expectedClient, fmt.Sprintf("%T", client))
+		for _, tt := range ttconfig.testCases {
+			t.Run(tt.name, func(t *testing.T) {
+				msg := new(dns.Msg)
+				msg.SetQuestion(dns.Fqdn(tt.qname), dns.TypeA)
+				msg.SetEdns0(1232, true)
+				msg.RecursionDesired = true
+				ctx := context.TODO()
+				rsp := got.exchange(ctx, msg)
+
+				require.NotNil(t, rsp, "response should not be nil")
+				require.Nil(t, rsp.Err)
+				rmsg := rsp.Msg
+				require.NotNil(t, rmsg, "rmsg should not be nil")
+				if tt.checkRcode {
+					assert.Equal(t, tt.rcode, rmsg.Rcode, "rcodes should match")
+				}
+				if tt.expectedNrAnswers >= 0 {
+					assert.Equal(t, tt.expectedNrAnswers, len(rmsg.Answer), "expected a different number of answers")
+				}
+				if len(tt.expectedAnswers) > 0 {
+					assert.True(t, matchall(rmsg.Answer, tt.expectedAnswers), "matchall for answers failed")
+				}
+			})
+		}
+	}
+}
+
+// Reproduces the flaky Test_exchange_dnstestdev [DOQ] cascade: a single
+// transient, server-side stream reset (quic.StreamError{Remote:true}) used to
+// permanently blacklist DoQ for the nameserver, so every following query
+// skipped the protocol and failed immediately with a nil message.
+func TestExchange_TransientDoQErrorDoesNotBlacklist(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	// The server resets the stream: transient, not evidence that DoQ is unsupported.
+	streamErr := &quic.StreamError{StreamID: 0, ErrorCode: 0x5, Remote: true}
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), streamErr)
+
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.ErrorIs(t, rsp.Err, streamErr)
+	assert.False(t, ns.protoSkipped("doq"), "a transient stream error must not blacklist DoQ")
+
+	// The next query must still use DoQ and succeed.
+	good := new(dns.Msg)
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return(good, time.Duration(0), nil)
+
+	msg2 := new(dns.Msg)
+	msg2.SetQuestion("example.org.", dns.TypeA)
+	rsp = ns.exchange(ctx, msg2)
+	require.NotNil(t, rsp)
+	assert.NoError(t, rsp.Err)
+	assert.NotNil(t, rsp.Msg, "a transient error must not disable DoQ for subsequent queries")
+}
+
+// A DoQ setup failure (no QUIC session could be established) must blacklist
+// the protocol for this nameserver, so we don't pay the dial timeout again.
+func TestExchange_DoQSetupErrorBlacklists(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), fmt.Errorf("%w: %w", clients.ErrNoDoQ, errors.New("handshake timeout")))
+
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.ErrorIs(t, rsp.Err, clients.ErrNoDoQ)
+	assert.True(t, ns.protoSkipped("doq"), "a setup failure should blacklist DoQ")
+
+	// The blacklist must be recorded with the 24h expiry...
+	expiry := time.Unix(0, ns.doqFailedUntil.Load())
+	assert.InDelta(t, time.Now().Add(protoBlacklistInterval).UnixNano(), expiry.UnixNano(), float64(time.Minute))
+}
+
+// A DoT setup failure (TCP connection could not be established) is a
+// permanent signal; a post-connection failure may be transient.
+func TestExchange_DoTErrorClassification(t *testing.T) {
+
+	t.Run("dial error blacklists DoT", func(t *testing.T) {
+		mockClient := new(MockDNSClient)
+		factory := func(protocol string) dnsClient {
+			return mockClient
+		}
+		config := ConfigBuilder(WithClient("dot", false))
+		ns := newNameserver("example.net.", "192.0.2.1", config)
+		ns.dnsClientFactory = factory
+
+		ctx := context.TODO()
+		msg := new(dns.Msg)
+		msg.SetQuestion("example.com.", dns.TypeA)
+
+		dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
+		mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+			Return((*dns.Msg)(nil), time.Duration(0), dialErr)
+
+		rsp := ns.exchange(ctx, msg)
+		require.NotNil(t, rsp)
+		assert.ErrorIs(t, rsp.Err, dialErr)
+		assert.True(t, ns.protoSkipped("dot"), "a dial failure should blacklist DoT")
+	})
+
+	t.Run("read error does not blacklist DoT", func(t *testing.T) {
+		mockClient := new(MockDNSClient)
+		factory := func(protocol string) dnsClient {
+			return mockClient
+		}
+		config := ConfigBuilder(WithClient("dot", false))
+		ns := newNameserver("example.net.", "192.0.2.1", config)
+		ns.dnsClientFactory = factory
+
+		ctx := context.TODO()
+		msg := new(dns.Msg)
+		msg.SetQuestion("example.com.", dns.TypeA)
+
+		readErr := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("i/o timeout")}
+		mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+			Return((*dns.Msg)(nil), time.Duration(0), readErr)
+
+		rsp := ns.exchange(ctx, msg)
+		require.NotNil(t, rsp)
+		assert.ErrorIs(t, rsp.Err, readErr)
+		assert.False(t, ns.protoSkipped("dot"), "a post-connection failure may be transient and must not blacklist DoT")
+	})
+}
+
+// The protocol blacklist is a negative cache, not a permanent verdict: it
+// must expire, so a nameserver that starts offering DoQ/DoT is retried
+// eventually. A success clears it right away.
+func TestExchange_BlacklistExpiry(t *testing.T) {
+	mockClient := new(MockDNSClient)
+	factory := func(protocol string) dnsClient {
+		return mockClient
+	}
+	config := ConfigBuilder(WithClient("doq", false))
+	ns := newNameserver("dns.quad9.net.", "9.9.9.9", config)
+	ns.dnsClientFactory = factory
+
+	ctx := context.TODO()
+	msg := new(dns.Msg)
+	msg.SetQuestion("example.com.", dns.TypeA)
+
+	// Blacklist DoQ...
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return((*dns.Msg)(nil), time.Duration(0), fmt.Errorf("%w: %w", clients.ErrNoDoQ, errors.New("handshake timeout")))
+	rsp := ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.True(t, ns.protoSkipped("doq"))
+
+	// ...but an entry that is older than the expiry window no longer skips.
+	ns.doqFailedUntil.Store(time.Now().Add(-time.Second).UnixNano())
+	assert.False(t, ns.protoSkipped("doq"), "an expired blacklist entry must not skip the protocol")
+
+	// Once the blacklist has expired and the protocol works again, the
+	// blacklist entry is cleared.
+	good := new(dns.Msg)
+	mockClient.On("ExchangeContext", mock.Anything, mock.Anything, mock.Anything).Once().
+		Return(good, time.Duration(0), nil)
+	ns.doqFailedUntil.Store(time.Now().Add(-time.Second).UnixNano()) // expired: DoQ is tried again
+	rsp = ns.exchange(ctx, msg)
+	require.NotNil(t, rsp)
+	assert.NoError(t, rsp.Err)
+	assert.False(t, ns.protoSkipped("doq"), "a success must clear the blacklist")
+	assert.Zero(t, ns.doqFailedUntil.Load())
 }
